@@ -1,0 +1,67 @@
+import asyncio
+import time
+
+from fastapi import FastAPI
+from httpx import ASGITransport, AsyncClient
+
+from fontes.api.app import create_app
+
+
+class OkCheck:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    async def check(self) -> None:
+        return None
+
+
+class FailCheck:
+    def __init__(self, name: str, msg: str) -> None:
+        self.name = name
+        self.msg = msg
+
+    async def check(self) -> None:
+        raise RuntimeError(self.msg)
+
+
+class SlowCheck:
+    def __init__(self, name: str) -> None:
+        self.name = name
+
+    async def check(self) -> None:
+        await asyncio.sleep(10)
+
+
+def client(app: FastAPI) -> AsyncClient:
+    return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
+
+
+async def test_health_ok() -> None:
+    app = create_app([OkCheck("database"), OkCheck("rabbitmq")], health_timeout=1.0)
+    async with client(app) as c:
+        r = await c.get("/health")
+    assert r.status_code == 200
+    assert r.json() == {"status": "ok", "checks": {"database": "ok", "rabbitmq": "ok"}}
+
+
+async def test_health_reports_failing_check() -> None:
+    app = create_app(
+        [OkCheck("database"), FailCheck("rabbitmq", "connection refused")], health_timeout=1.0
+    )
+    async with client(app) as c:
+        r = await c.get("/health")
+    assert r.status_code == 503
+    assert r.json() == {
+        "status": "fail",
+        "checks": {"database": "ok", "rabbitmq": "connection refused"},
+    }
+
+
+async def test_health_times_out_slow_check() -> None:
+    app = create_app([SlowCheck("database")], health_timeout=0.1)
+    started = time.monotonic()
+    async with client(app) as c:
+        r = await c.get("/health")
+    assert time.monotonic() - started < 1.0
+    assert r.status_code == 503
+    assert r.json()["checks"]["database"] == "timeout"
