@@ -38,7 +38,7 @@ Each milestone gets its own plan file written when the previous one is done.
 - `mypy --strict` passes on `fontes/` and `tests/`. `ruff check` and `ruff format --check` pass.
 - Tests must not need Ollama or Claude. Integration tests are marked `@pytest.mark.integration` and are excluded from the default run.
 - Settings come from environment variables via pydantic-settings, with no prefix: `DATABASE_URL`, `RABBITMQ_URL`.
-- Every task ends with a commit and a push to `origin main`. Commit messages are in English and end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
+- Every task ends with a commit and a push to `origin main`. Commit messages are in English, with no co-author or AI attribution trailers.
 - The repo is developed on Windows, so files use LF line endings, enforced by `.gitattributes`.
 
 ## Review Focus
