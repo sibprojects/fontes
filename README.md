@@ -15,7 +15,6 @@ Fontes answers questions about your own documents, and every answer cites its so
 You need Docker with Compose.
 
 ```bash
-cp .env.example .env
 docker compose up --build
 ```
 
@@ -38,6 +37,7 @@ The backend lives in `backend/` and is managed with [uv](https://docs.astral.sh/
 ```bash
 cd backend
 uv sync
+cp .env.example .env            # optional: override DATABASE_URL / RABBITMQ_URL
 
 uv run pytest                  # unit tests
 uv run ruff check .            # lint
