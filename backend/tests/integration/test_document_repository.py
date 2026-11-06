@@ -2,9 +2,9 @@ from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.exc import IntegrityError
 
 from fontes.adapters.persistence.documents import SqlDocumentRepository
+from fontes.application.ports.documents import DuplicateDocumentError
 from fontes.domain.documents import Document
 
 pytestmark = pytest.mark.integration
@@ -61,13 +61,13 @@ async def test_delete_returns_false_for_unknown(repo: SqlDocumentRepository) -> 
 
 async def test_duplicate_hash_violates_unique_index(repo: SqlDocumentRepository) -> None:
     await repo.add(Document.from_upload("a.pdf", "same", now=T0))
-    with pytest.raises(IntegrityError):
+    with pytest.raises(DuplicateDocumentError):
         await repo.add(Document.from_upload("b.pdf", "same", now=T0))
 
 
 async def test_duplicate_url_violates_unique_index(repo: SqlDocumentRepository) -> None:
     await repo.add(Document.from_url("https://e.com/x", now=T0))
-    with pytest.raises(IntegrityError):
+    with pytest.raises(DuplicateDocumentError):
         await repo.add(Document.from_url("https://e.com/x", now=T0))
 
 

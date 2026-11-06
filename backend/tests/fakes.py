@@ -1,5 +1,6 @@
 from uuid import UUID
 
+from fontes.application.ports.documents import DuplicateDocumentError
 from fontes.domain.documents import Document
 
 
@@ -8,6 +9,12 @@ class InMemoryDocumentRepository:
         self.rows: dict[UUID, Document] = {}
 
     async def add(self, doc: Document) -> None:
+        # Mirrors the unique indexes on content_hash and url.
+        for d in self.rows.values():
+            if (doc.content_hash and d.content_hash == doc.content_hash) or (
+                doc.url and d.url == doc.url
+            ):
+                raise DuplicateDocumentError(doc.content_hash or doc.url or "")
         self.rows[doc.id] = doc
 
     async def get(self, id: UUID) -> Document | None:

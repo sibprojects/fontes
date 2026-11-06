@@ -4,8 +4,14 @@ from uuid import UUID
 from fontes.domain.documents import Document
 
 
+class DuplicateDocumentError(Exception):
+    """`add` hit an existing document with the same content hash or URL."""
+
+
 class DocumentRepository(Protocol):
-    async def add(self, doc: Document) -> None: ...
+    async def add(self, doc: Document) -> None:
+        """Raise DuplicateDocumentError if the content hash or URL is already stored."""
+        ...
 
     async def get(self, id: UUID) -> Document | None: ...
 

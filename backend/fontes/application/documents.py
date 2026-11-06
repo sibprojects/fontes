@@ -4,7 +4,11 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
-from fontes.application.ports.documents import DocumentRepository, FileStorage
+from fontes.application.ports.documents import (
+    DocumentRepository,
+    DuplicateDocumentError,
+    FileStorage,
+)
 from fontes.domain.documents import Document, DocumentError, normalize_url
 
 
@@ -56,16 +60,27 @@ class DocumentService:
         await self._storage.save(doc.storage_key, data)
         try:
             await self._repo.add(doc)
-        except BaseException:
+        except BaseException as exc:
             await self._storage.delete(doc.storage_key)
+            # A concurrent upload of the same content won the race: return its document.
+            if isinstance(exc, DuplicateDocumentError) and (
+                existing := await self._repo.find_by_hash(content_hash)
+            ):
+                return AddResult(existing, created=False)
             raise
         return AddResult(doc, created=True)
 
     async def add_url(self, url: str) -> AddResult:
-        if existing := await self._repo.find_by_url(normalize_url(url)):
+        normalized = normalize_url(url)
+        if existing := await self._repo.find_by_url(normalized):
             return AddResult(existing, created=False)
-        doc = Document.from_url(url, now=self._clock())
-        await self._repo.add(doc)
+        doc = Document.from_url(normalized, now=self._clock())
+        try:
+            await self._repo.add(doc)
+        except DuplicateDocumentError:
+            if existing := await self._repo.find_by_url(normalized):
+                return AddResult(existing, created=False)
+            raise
         return AddResult(doc, created=True)
 
     async def list(self) -> list[Document]:

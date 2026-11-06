@@ -128,3 +128,35 @@ async def test_delete_url_document_has_no_file(
 async def test_delete_unknown_raises(svc: DocumentService) -> None:
     with pytest.raises(DocumentNotFoundError):
         await svc.delete(uuid4())
+
+
+async def test_concurrent_duplicate_upload_returns_existing(
+    svc: DocumentService, repo: InMemoryDocumentRepository, storage: InMemoryFileStorage
+) -> None:
+    # Simulate the race: the other request inserts between our lookup and our insert.
+    first = await svc.upload("a.pdf", b"same")
+
+    async def lookup_misses_once(content_hash: str) -> Document | None:
+        repo.find_by_hash = original  # type: ignore[method-assign]
+        return None
+
+    original = repo.find_by_hash
+    repo.find_by_hash = lookup_misses_once  # type: ignore[method-assign]
+    second = await svc.upload("b.pdf", b"same")
+    assert not second.created and second.document.id == first.document.id
+    assert list(storage.files) == [first.document.storage_key]
+
+
+async def test_concurrent_duplicate_url_returns_existing(
+    svc: DocumentService, repo: InMemoryDocumentRepository
+) -> None:
+    first = await svc.add_url("https://e.com/x")
+
+    async def lookup_misses_once(url: str) -> Document | None:
+        repo.find_by_url = original  # type: ignore[method-assign]
+        return None
+
+    original = repo.find_by_url
+    repo.find_by_url = lookup_misses_once  # type: ignore[method-assign]
+    second = await svc.add_url("https://e.com/x")
+    assert not second.created and second.document.id == first.document.id

@@ -1,10 +1,14 @@
 from uuid import UUID
 
 from sqlalchemy import ColumnElement, delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from fontes.adapters.persistence.models import DocumentRow
+from fontes.application.ports.documents import DuplicateDocumentError
 from fontes.domain.documents import Document, DocumentStatus, SourceType
+
+_UNIQUE_VIOLATION = "23505"
 
 
 def _to_row(doc: Document) -> DocumentRow:
@@ -42,8 +46,13 @@ class SqlDocumentRepository:
         self._sessions = session_factory
 
     async def add(self, doc: Document) -> None:
-        async with self._sessions.begin() as session:
-            session.add(_to_row(doc))
+        try:
+            async with self._sessions.begin() as session:
+                session.add(_to_row(doc))
+        except IntegrityError as exc:
+            if getattr(exc.orig, "sqlstate", None) == _UNIQUE_VIOLATION:
+                raise DuplicateDocumentError(doc.content_hash or doc.url or str(doc.id)) from exc
+            raise
 
     async def get(self, id: UUID) -> Document | None:
         async with self._sessions() as session:
