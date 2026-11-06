@@ -29,18 +29,34 @@ services:
       timeout: 10s
       retries: 10
 
-  api:
+  # One-shot: applies database migrations, then exits. api waits for it.
+  migrate:
     build: ./backend
+    image: fontes-backend
+    command: ["alembic", "upgrade", "head"]
     environment:
       DATABASE_URL: postgresql+asyncpg://fontes:fontes@postgres:5432/fontes
-      RABBITMQ_URL: amqp://fontes:fontes@rabbitmq:5672/
-    ports:
-      - "8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
+
+  api:
+    build: ./backend
+    image: fontes-backend
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fontes:fontes@postgres:5432/fontes
+      RABBITMQ_URL: amqp://fontes:fontes@rabbitmq:5672/
+      STORAGE_DIR: /data/uploads
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
       rabbitmq:
         condition: service_healthy
 
 volumes:
   pgdata:
+  uploads:

@@ -30,6 +30,28 @@ curl localhost:8000/health
 | API | http://localhost:8000 (OpenAPI docs at `/docs`) |
 | RabbitMQ management | http://localhost:15672 (login `fontes` / `fontes`) |
 
+Database migrations run automatically: the one-shot `migrate` service applies them before `api` starts.
+
+## API
+
+| Method | Path | What it does |
+|---|---|---|
+| `POST` | `/documents` | Upload a file (multipart field `file`): `.pdf`, `.md`, `.markdown`, `.html`, `.htm`, up to 20 MiB |
+| `POST` | `/documents/url` | Add a web page by URL: `{"url": "https://..."}` |
+| `GET` | `/documents` | List documents, newest first |
+| `DELETE` | `/documents/{id}` | Delete a document and its stored file |
+
+A new document is `201 Created`. Uploading the same content again, or adding the same URL, returns the existing document with `200 OK`. Errors come back as `{"detail": "..."}` with `400` (empty file), `413` (too large), `415` (unsupported type), `422` (invalid URL) or `404` (unknown id).
+
+```bash
+curl -F file=@notes.md localhost:8000/documents
+curl -H 'content-type: application/json' -d '{"url":"https://example.com"}' localhost:8000/documents/url
+curl localhost:8000/documents
+curl -X DELETE localhost:8000/documents/<id>
+```
+
+New documents stay `queued` for now: ingestion (parsing, chunking, embeddings) arrives in the next milestones.
+
 ## Development
 
 The backend lives in `backend/` and is managed with [uv](https://docs.astral.sh/uv/):

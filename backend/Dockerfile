@@ -5,13 +5,16 @@ WORKDIR /app
 COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY fontes ./fontes
+COPY alembic.ini ./
+COPY alembic ./alembic
 RUN uv sync --frozen --no-dev
 
 FROM python:3.12-slim
-RUN useradd --create-home --uid 1000 fontes
+RUN useradd --create-home --uid 1000 fontes \
+    && mkdir -p /data/uploads && chown fontes:fontes /data/uploads
 WORKDIR /app
 COPY --from=build --chown=fontes:fontes /app /app
-ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1
+ENV PATH="/app/.venv/bin:$PATH" PYTHONUNBUFFERED=1 STORAGE_DIR=/data/uploads
 USER fontes
 EXPOSE 8000
 CMD ["uvicorn", "fontes.main:app", "--host", "0.0.0.0", "--port", "8000"]
