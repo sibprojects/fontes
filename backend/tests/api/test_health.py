@@ -5,6 +5,9 @@ from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 
 from fontes.api.app import create_app
+from fontes.application.documents import DocumentService
+from fontes.application.ports.health import HealthCheck
+from tests.fakes import InMemoryDocumentRepository, InMemoryFileStorage
 
 
 class OkCheck:
@@ -32,12 +35,17 @@ class SlowCheck:
         await asyncio.sleep(10)
 
 
+def health_app(checks: list[HealthCheck], health_timeout: float) -> FastAPI:
+    service = DocumentService(InMemoryDocumentRepository(), InMemoryFileStorage(), 100)
+    return create_app(checks, health_timeout, documents=service, max_upload_bytes=100)
+
+
 def client(app: FastAPI) -> AsyncClient:
     return AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
 
 
 async def test_health_ok() -> None:
-    app = create_app([OkCheck("database"), OkCheck("rabbitmq")], health_timeout=1.0)
+    app = health_app([OkCheck("database"), OkCheck("rabbitmq")], health_timeout=1.0)
     async with client(app) as c:
         r = await c.get("/health")
     assert r.status_code == 200
@@ -45,7 +53,7 @@ async def test_health_ok() -> None:
 
 
 async def test_health_reports_failing_check() -> None:
-    app = create_app(
+    app = health_app(
         [OkCheck("database"), FailCheck("rabbitmq", "connection refused")], health_timeout=1.0
     )
     async with client(app) as c:
@@ -58,7 +66,7 @@ async def test_health_reports_failing_check() -> None:
 
 
 async def test_health_times_out_slow_check() -> None:
-    app = create_app([SlowCheck("database")], health_timeout=0.1)
+    app = health_app([SlowCheck("database")], health_timeout=0.1)
     started = time.monotonic()
     async with client(app) as c:
         r = await c.get("/health")

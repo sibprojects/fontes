@@ -7,3 +7,6 @@ __pycache__/
 node_modules/
 dist/
 .superpowers/
+
+# Local uploads (STORAGE_DIR default)
+data/
