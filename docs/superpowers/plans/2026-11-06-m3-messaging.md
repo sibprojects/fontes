@@ -208,7 +208,7 @@
 - Create: `scripts/smoke.sh` (bash, `set -euo pipefail`, base URL from `$1`, default `http://127.0.0.1:8000`)
 - Modify: `.github/workflows/ci.yml`, `README.md`
 
-- [ ] **Step 1: Write `scripts/smoke.sh`:** `curl -fsS $BASE/health`; upload a small generated Markdown file with a random line (so it is never a duplicate); poll `GET $BASE/documents/` for that id up to 30 s until `ready`; exit 1 with the last status on timeout. It needs only curl and grep/sed (no jq).
+- [ ] **Step 1: Write `scripts/smoke.sh`:** `curl -fsS $BASE/health`; upload a small generated Markdown file with a random line (so it is never a duplicate); poll `GET $BASE/documents` for that id up to 30 s until `ready`; exit 1 with the last status on timeout. It needs only curl and grep/sed (no jq).
 - [ ] **Step 2: Prove it can fail, locally:** `docker compose stop worker` → `scripts/smoke.sh` exits 1 within 30 s; `docker compose start worker` → exits 0.
 - [ ] **Step 3:** Add a CI job `compose-smoke` (`needs: backend`): `docker compose up -d --build --wait api worker`, then `scripts/smoke.sh`; on failure print `docker compose logs`; always `docker compose down -v`.
 - [ ] **Step 4: README:** a "How ingestion works" section with the three queues as a small diagram (text or Mermaid), the retry/DLQ rules, how to watch it in the management UI, and the **"Why not Celery"** section with the spec's two reasons: the stack is async end to end, and the queue topology is explicit on purpose. Add the worker to the services table.
