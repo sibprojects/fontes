@@ -5,6 +5,7 @@ description = "RAG over your documents with cited sources"
 requires-python = ">=3.12"
 dependencies = [
     "aio-pika",
+    "alembic>=1.20.1",
     "asyncpg",
     "fastapi",
     "pydantic-settings",
@@ -44,3 +45,6 @@ target-version = "py312"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
+
+[tool.ruff.lint.isort]
+known-third-party = ["alembic"]
