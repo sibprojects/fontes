@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 
 from fontes.api import health
 from fontes.api.documents import router as documents_router
+from fontes.api.limits import MULTIPART_OVERHEAD_BYTES, BodySizeLimit
 from fontes.application.documents import (
     DocumentNotFoundError,
     DocumentService,
@@ -47,6 +48,11 @@ def create_app(
     app.state.max_upload_bytes = max_upload_bytes
     for exc_class in (DocumentNotFoundError, DocumentError):
         app.add_exception_handler(exc_class, _error_response)
+    app.add_middleware(
+        BodySizeLimit,
+        path="/documents",
+        max_bytes=max_upload_bytes + MULTIPART_OVERHEAD_BYTES,
+    )
     app.include_router(health.router)
     app.include_router(documents_router)
     return app

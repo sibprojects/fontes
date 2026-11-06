@@ -5,6 +5,7 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from fontes.api.app import create_app
+from fontes.api.limits import MULTIPART_OVERHEAD_BYTES
 from fontes.application.documents import DocumentService
 from tests.fakes import InMemoryDocumentRepository, InMemoryFileStorage
 
@@ -115,3 +116,39 @@ async def test_delete_204_then_404(c: AsyncClient) -> None:
 
 async def test_delete_unknown_returns_404(c: AsyncClient) -> None:
     assert (await c.delete(f"/documents/{uuid4()}")).status_code == 404
+
+
+async def test_oversized_content_length_is_rejected_before_reading(
+    c: AsyncClient, storage: InMemoryFileStorage
+) -> None:
+    body = b"x" * (LIMIT + MULTIPART_OVERHEAD_BYTES + 1)
+    r = await c.post(
+        "/documents",
+        content=body,
+        headers={"content-type": "multipart/form-data; boundary=b"},
+    )
+    assert r.status_code == 413
+    assert isinstance(r.json()["detail"], str)
+    assert storage.files == {}
+
+
+async def test_oversized_chunked_body_is_rejected(
+    c: AsyncClient, storage: InMemoryFileStorage
+) -> None:
+    async def chunks() -> AsyncIterator[bytes]:
+        # A well-formed file part whose data never ends within the limit.
+        yield (
+            b"--b\r\n"
+            b'Content-Disposition: form-data; name="file"; filename="a.pdf"\r\n'
+            b"Content-Type: application/pdf\r\n\r\n"
+        )
+        for _ in range(100):
+            yield b"x" * 1024 * 1024
+
+    r = await c.post(
+        "/documents",
+        content=chunks(),
+        headers={"content-type": "multipart/form-data; boundary=b"},
+    )
+    assert r.status_code == 413
+    assert storage.files == {}

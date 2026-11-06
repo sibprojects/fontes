@@ -43,4 +43,4 @@ async def test_concurrent_identical_uploads_never_fail(
         )
     assert sorted(r.status_code for r in rs) == [200, 200, 200, 200, 201]
     assert len({r.json()["id"] for r in rs}) == 1
-    assert len(list(tmp_path.iterdir())) == 1
+    assert len(await asyncio.to_thread(lambda: list(tmp_path.iterdir()))) == 1
