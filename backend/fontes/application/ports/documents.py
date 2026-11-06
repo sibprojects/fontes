@@ -1,7 +1,8 @@
+import builtins
 from typing import Protocol
 from uuid import UUID
 
-from fontes.domain.documents import Document
+from fontes.domain.documents import Document, DocumentStatus
 
 
 class DuplicateDocumentError(Exception):
@@ -25,6 +26,21 @@ class DocumentRepository(Protocol):
 
     async def delete(self, id: UUID) -> bool:
         """Return False if there was no such document."""
+        ...
+
+    async def start_processing(self, id: UUID) -> Document | None:
+        """Atomically mark the document processing, count the attempt and clear the error.
+
+        Return the updated document, or None if it is missing or already ready.
+        """
+        ...
+
+    async def set_status(self, id: UUID, status: DocumentStatus, error: str | None = None) -> bool:
+        """Set status and error; return False if the document is missing. Never inserts."""
+        ...
+
+    async def list_by_status(self, status: DocumentStatus) -> builtins.list[Document]:
+        """Documents with this status, oldest first."""
         ...
 
 

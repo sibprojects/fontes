@@ -1,7 +1,9 @@
+import builtins
+from dataclasses import replace
 from uuid import UUID
 
 from fontes.application.ports.documents import DuplicateDocumentError
-from fontes.domain.documents import Document
+from fontes.domain.documents import Document, DocumentStatus
 
 
 class InMemoryDocumentRepository:
@@ -31,6 +33,26 @@ class InMemoryDocumentRepository:
 
     async def delete(self, id: UUID) -> bool:
         return self.rows.pop(id, None) is not None
+
+    async def start_processing(self, id: UUID) -> Document | None:
+        doc = self.rows.get(id)
+        if doc is None or doc.status == DocumentStatus.READY:
+            return None
+        doc = replace(doc, status=DocumentStatus.PROCESSING, attempts=doc.attempts + 1, error=None)
+        self.rows[id] = doc
+        return doc
+
+    async def set_status(self, id: UUID, status: DocumentStatus, error: str | None = None) -> bool:
+        doc = self.rows.get(id)
+        if doc is None:
+            return False
+        self.rows[id] = replace(doc, status=status, error=error)
+        return True
+
+    async def list_by_status(self, status: DocumentStatus) -> builtins.list[Document]:
+        return sorted(
+            (d for d in self.rows.values() if d.status == status), key=lambda d: d.created_at
+        )
 
 
 class InMemoryFileStorage:

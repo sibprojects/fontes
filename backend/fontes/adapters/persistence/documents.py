@@ -1,6 +1,7 @@
+import builtins
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, delete, select
+from sqlalchemy import ColumnElement, delete, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -78,6 +79,39 @@ class SqlDocumentRepository:
                 delete(DocumentRow).where(DocumentRow.id == id).returning(DocumentRow.id)
             )
             return result.first() is not None
+
+    async def start_processing(self, id: UUID) -> Document | None:
+        async with self._sessions.begin() as session:
+            row = await session.scalar(
+                update(DocumentRow)
+                .where(DocumentRow.id == id, DocumentRow.status != DocumentStatus.READY.value)
+                .values(
+                    status=DocumentStatus.PROCESSING.value,
+                    attempts=DocumentRow.attempts + 1,
+                    error=None,
+                )
+                .returning(DocumentRow)
+            )
+            return _to_domain(row) if row else None
+
+    async def set_status(self, id: UUID, status: DocumentStatus, error: str | None = None) -> bool:
+        async with self._sessions.begin() as session:
+            result = await session.execute(
+                update(DocumentRow)
+                .where(DocumentRow.id == id)
+                .values(status=status.value, error=error)
+                .returning(DocumentRow.id)
+            )
+            return result.first() is not None
+
+    async def list_by_status(self, status: DocumentStatus) -> builtins.list[Document]:
+        async with self._sessions() as session:
+            rows = await session.scalars(
+                select(DocumentRow)
+                .where(DocumentRow.status == status.value)
+                .order_by(DocumentRow.created_at, DocumentRow.id)
+            )
+            return [_to_domain(r) for r in rows]
 
     async def _first(self, condition: ColumnElement[bool]) -> Document | None:
         async with self._sessions() as session:

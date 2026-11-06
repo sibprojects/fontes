@@ -6,6 +6,15 @@ import pytest
 from fontes.adapters.persistence.documents import SqlDocumentRepository
 from fontes.application.ports.documents import DuplicateDocumentError
 from fontes.domain.documents import Document
+from tests.repository_contract import (  # noqa: F401
+    test_list_by_status_oldest_first,
+    test_set_status_clears_error,
+    test_set_status_missing_returns_false,
+    test_set_status_with_error,
+    test_start_processing_increments_attempts,
+    test_start_processing_missing_returns_none,
+    test_start_processing_skips_ready,
+)
 
 pytestmark = pytest.mark.integration
 
