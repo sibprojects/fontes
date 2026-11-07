@@ -7,16 +7,21 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from fontes.adapters.messaging.connection import AmqpConnection
+from fontes.adapters.messaging.consumer import IngestConsumer
 from fontes.adapters.messaging.health import RabbitMQHealthCheck
 from fontes.adapters.messaging.publisher import AmqpPublisher
 from fontes.adapters.messaging.topology import Topology
 from fontes.adapters.persistence.documents import SqlDocumentRepository
 from fontes.adapters.persistence.health import PostgresHealthCheck
+from fontes.adapters.processing import StubDocumentProcessor
 from fontes.adapters.storage.local import LocalFileStorage
 from fontes.api.app import create_app
 from fontes.application.documents import DocumentService
+from fontes.application.ingestion import IngestionService
 from fontes.application.ports.health import HealthCheck
+from fontes.application.ports.ingestion import DocumentProcessor
 from fontes.config import Settings
+from fontes.worker import Worker, logged
 
 
 def build_app(settings: Settings) -> FastAPI:
@@ -47,3 +52,28 @@ def build_app(settings: Settings) -> FastAPI:
         max_upload_bytes=settings.max_upload_bytes,
         lifespan=lifespan,
     )
+
+
+def build_worker(settings: Settings, processor: DocumentProcessor | None = None) -> Worker:
+    engine = create_async_engine(settings.database_url, pool_pre_ping=True)
+    amqp = AmqpConnection(settings.rabbitmq_url, connect_timeout=settings.health_check_timeout)
+    topology = Topology(settings.amqp_prefix, settings.ingest_retry_delay_ms)
+    service = IngestionService(
+        SqlDocumentRepository(async_sessionmaker(engine, expire_on_commit=False)),
+        processor or StubDocumentProcessor(settings.stub_processing_seconds),
+        AmqpPublisher(amqp, topology),
+        max_attempts=settings.ingest_max_attempts,
+    )
+    consumer = IngestConsumer(
+        amqp,
+        topology,
+        logged(service.handle),
+        max_crashes=settings.ingest_max_attempts,
+        prefetch=settings.worker_prefetch,
+    )
+
+    async def close() -> None:
+        await amqp.close()
+        await engine.dispose()
+
+    return Worker(service, consumer, close)

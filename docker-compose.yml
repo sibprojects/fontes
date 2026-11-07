@@ -29,7 +29,8 @@ services:
       timeout: 10s
       retries: 10
 
-  # One-shot: applies database migrations, then exits. api waits for it.
+  # One-shot: applies database migrations, then exits. api and worker wait for it.
+  # The only service with `build:`; api and worker reuse the image it builds.
   migrate:
     build: ./backend
     image: fontes-backend
@@ -41,14 +42,37 @@ services:
         condition: service_healthy
 
   api:
-    build: ./backend
     image: fontes-backend
+    restart: unless-stopped
     environment:
       DATABASE_URL: postgresql+asyncpg://fontes:fontes@postgres:5432/fontes
       RABBITMQ_URL: amqp://fontes:fontes@rabbitmq:5672/
       STORAGE_DIR: /data/uploads
     ports:
       - "8000:8000"
+    volumes:
+      - uploads:/data/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Consumes fontes.ingest; on start it also requeues documents stuck in `queued`.
+  worker:
+    image: fontes-backend
+    command: ["python", "-m", "fontes.worker"]
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fontes:fontes@postgres:5432/fontes
+      RABBITMQ_URL: amqp://fontes:fontes@rabbitmq:5672/
+      STORAGE_DIR: /data/uploads
     volumes:
       - uploads:/data/uploads
     depends_on:

@@ -1,32 +1,16 @@
 import asyncio
 import json
-from collections.abc import AsyncIterator
 from pathlib import Path
-from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
 from fontes.adapters.messaging.connection import AmqpConnection
-from fontes.adapters.messaging.topology import Topology
 from fontes.adapters.persistence.documents import SqlDocumentRepository
 from fontes.config import Settings
 from fontes.container import build_app
 
 pytestmark = pytest.mark.integration
-
-
-@pytest.fixture
-async def settings(tmp_path: Path) -> AsyncIterator[Settings]:
-    """Real wiring, with its own queues so tests never touch the dev `fontes.ingest`."""
-    settings = Settings(storage_dir=tmp_path, amqp_prefix=f"test-{uuid4().hex[:8]}")
-    yield settings
-    connection = AmqpConnection(settings.rabbitmq_url, connect_timeout=3.0)
-    channel = await (await connection.get()).channel()
-    topology = Topology(settings.amqp_prefix, settings.ingest_retry_delay_ms)
-    for name in (topology.main, topology.retry, topology.dlq):
-        await channel.queue_delete(name)
-    await connection.close()
 
 
 async def test_upload_list_delete_through_real_wiring(
