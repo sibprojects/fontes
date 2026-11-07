@@ -42,6 +42,11 @@ class IngestionService:
         doc = await self._repo.start_processing(document_id)
         if doc is None:  # deleted, or already ready
             return IngestResult(IngestOutcome.ACK)
+        if doc.attempts > self._max_attempts:
+            # Earlier attempts died with the worker (nothing was recorded), and RabbitMQ
+            # keeps redelivering; without this the message would block the queue forever.
+            error = f"Gave up after {self._max_attempts} attempts"
+            return await self._finish(doc.id, DocumentStatus.FAILED, error)
 
         try:
             await self._processor.process(doc)

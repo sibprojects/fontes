@@ -126,3 +126,17 @@ async def test_requeue_queued_publishes_only_queued() -> None:
     await repo.set_status(failed.id, DocumentStatus.FAILED, "boom")
     assert await _service(repo, FakeProcessor(), publisher).requeue_queued() == 1
     assert publisher.published == [queued.id]
+
+
+async def test_redelivery_past_attempt_limit_dead_letters_without_processing() -> None:
+    # The worker died during each of three attempts (no exception, so nothing was recorded):
+    # RabbitMQ keeps redelivering, and the attempt counter is the only thing that can stop it.
+    repo, processor = InMemoryDocumentRepository(), FakeProcessor()
+    doc = await _queued(repo)
+    for _ in range(3):
+        await repo.start_processing(doc.id)
+    result = await _service(repo, processor).handle(doc.id)
+    assert result == IngestResult(IngestOutcome.DEAD_LETTER, "Gave up after 3 attempts")
+    assert processor.calls == 0
+    got = await _stored(repo, doc)
+    assert (got.status, got.error) == (DocumentStatus.FAILED, "Gave up after 3 attempts")
