@@ -31,7 +31,7 @@ class DocumentRepository(Protocol):
     async def start_processing(self, id: UUID) -> Document | None:
         """Atomically mark the document processing, count the attempt and clear the error.
 
-        Return the updated document, or None if it is missing or already ready.
+        Return the updated document, or None if it is missing, ready or failed.
         """
         ...
 

@@ -9,6 +9,7 @@ from tests.repository_contract import (  # noqa: F401
     test_set_status_missing_returns_false,
     test_set_status_with_error,
     test_start_processing_increments_attempts,
+    test_start_processing_skips_failed,
     test_start_processing_missing_returns_none,
     test_start_processing_skips_ready,
 )

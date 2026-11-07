@@ -70,3 +70,12 @@ async def test_list_by_status_oldest_first(repo: DocumentRepository) -> None:
     queued = await repo.list_by_status(DocumentStatus.QUEUED)
     assert [d.id for d in queued] == [older.id, newer.id]
     assert [d.id for d in await repo.list_by_status(DocumentStatus.READY)] == [ready.id]
+
+
+async def test_start_processing_skips_failed(repo: DocumentRepository) -> None:
+    # A stale duplicate message must not bring a dead-lettered document back to life.
+    d = await _queued(repo)
+    await repo.set_status(d.id, DocumentStatus.FAILED, "corrupt PDF")
+    assert await repo.start_processing(d.id) is None
+    got = await repo.get(d.id)
+    assert got is not None and (got.status, got.error) == (DocumentStatus.FAILED, "corrupt PDF")

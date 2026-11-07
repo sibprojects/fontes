@@ -9,6 +9,9 @@ from fontes.adapters.persistence.models import DocumentRow
 from fontes.application.ports.documents import DuplicateDocumentError
 from fontes.domain.documents import Document, DocumentStatus, SourceType
 
+# Only these may (re)start processing: ready is done, failed is dead-lettered.
+_RUNNABLE = (DocumentStatus.QUEUED.value, DocumentStatus.PROCESSING.value)
+
 _UNIQUE_VIOLATION = "23505"
 
 
@@ -84,7 +87,7 @@ class SqlDocumentRepository:
         async with self._sessions.begin() as session:
             row = await session.scalar(
                 update(DocumentRow)
-                .where(DocumentRow.id == id, DocumentRow.status != DocumentStatus.READY.value)
+                .where(DocumentRow.id == id, DocumentRow.status.in_(_RUNNABLE))
                 .values(
                     status=DocumentStatus.PROCESSING.value,
                     attempts=DocumentRow.attempts + 1,

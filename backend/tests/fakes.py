@@ -37,7 +37,7 @@ class InMemoryDocumentRepository:
 
     async def start_processing(self, id: UUID) -> Document | None:
         doc = self.rows.get(id)
-        if doc is None or doc.status == DocumentStatus.READY:
+        if doc is None or doc.status not in (DocumentStatus.QUEUED, DocumentStatus.PROCESSING):
             return None
         doc = replace(doc, status=DocumentStatus.PROCESSING, attempts=doc.attempts + 1, error=None)
         self.rows[id] = doc
