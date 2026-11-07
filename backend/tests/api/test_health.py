@@ -7,7 +7,7 @@ from httpx import ASGITransport, AsyncClient
 from fontes.api.app import create_app
 from fontes.application.documents import DocumentService
 from fontes.application.ports.health import HealthCheck
-from tests.fakes import InMemoryDocumentRepository, InMemoryFileStorage
+from tests.fakes import FakePublisher, InMemoryDocumentRepository, InMemoryFileStorage
 
 
 class OkCheck:
@@ -36,7 +36,9 @@ class SlowCheck:
 
 
 def health_app(checks: list[HealthCheck], health_timeout: float) -> FastAPI:
-    service = DocumentService(InMemoryDocumentRepository(), InMemoryFileStorage(), 100)
+    service = DocumentService(
+        InMemoryDocumentRepository(), InMemoryFileStorage(), FakePublisher(), 100
+    )
     return create_app(checks, health_timeout, documents=service, max_upload_bytes=100)
 
 

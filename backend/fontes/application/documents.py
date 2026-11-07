@@ -1,4 +1,5 @@
 import hashlib
+import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -9,7 +10,10 @@ from fontes.application.ports.documents import (
     DuplicateDocumentError,
     FileStorage,
 )
+from fontes.application.ports.ingestion import MessagePublisher
 from fontes.domain.documents import Document, DocumentError, normalize_url
+
+log = logging.getLogger(__name__)
 
 
 class DocumentNotFoundError(Exception):
@@ -39,11 +43,13 @@ class DocumentService:
         self,
         repo: DocumentRepository,
         storage: FileStorage,
+        publisher: MessagePublisher,
         max_upload_bytes: int,
         clock: Callable[[], datetime] = _utc_now,
     ) -> None:
         self._repo = repo
         self._storage = storage
+        self._publisher = publisher
         self._max_upload_bytes = max_upload_bytes
         self._clock = clock
 
@@ -68,7 +74,7 @@ class DocumentService:
             ):
                 return AddResult(existing, created=False)
             raise
-        return AddResult(doc, created=True)
+        return await self._queued(doc)
 
     async def add_url(self, url: str) -> AddResult:
         normalized = normalize_url(url)
@@ -81,6 +87,15 @@ class DocumentService:
             if existing := await self._repo.find_by_url(normalized):
                 return AddResult(existing, created=False)
             raise
+        return await self._queued(doc)
+
+    async def _queued(self, doc: Document) -> AddResult:
+        # The document is already saved as queued; if the broker is down, the worker's
+        # startup sweep publishes it later, so the upload itself still succeeds.
+        try:
+            await self._publisher.publish_ingest(doc.id)
+        except Exception as exc:
+            log.warning("Could not publish document %s for ingestion: %r", doc.id, exc)
         return AddResult(doc, created=True)
 
     async def list(self) -> list[Document]:

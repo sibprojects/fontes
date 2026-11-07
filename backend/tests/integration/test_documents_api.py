@@ -1,9 +1,14 @@
 import asyncio
+import json
+from collections.abc import AsyncIterator
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from fontes.adapters.messaging.connection import AmqpConnection
+from fontes.adapters.messaging.topology import Topology
 from fontes.adapters.persistence.documents import SqlDocumentRepository
 from fontes.config import Settings
 from fontes.container import build_app
@@ -11,10 +16,23 @@ from fontes.container import build_app
 pytestmark = pytest.mark.integration
 
 
+@pytest.fixture
+async def settings(tmp_path: Path) -> AsyncIterator[Settings]:
+    """Real wiring, with its own queues so tests never touch the dev `fontes.ingest`."""
+    settings = Settings(storage_dir=tmp_path, amqp_prefix=f"test-{uuid4().hex[:8]}")
+    yield settings
+    connection = AmqpConnection(settings.rabbitmq_url, connect_timeout=3.0)
+    channel = await (await connection.get()).channel()
+    topology = Topology(settings.amqp_prefix, settings.ingest_retry_delay_ms)
+    for name in (topology.main, topology.retry, topology.dlq):
+        await channel.queue_delete(name)
+    await connection.close()
+
+
 async def test_upload_list_delete_through_real_wiring(
-    repo: SqlDocumentRepository, tmp_path: Path
+    repo: SqlDocumentRepository, settings: Settings, tmp_path: Path
 ) -> None:
-    app = build_app(Settings(storage_dir=tmp_path))
+    app = build_app(settings)
     async with (
         app.router.lifespan_context(app),
         AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c,
@@ -31,9 +49,9 @@ async def test_upload_list_delete_through_real_wiring(
 
 
 async def test_concurrent_identical_uploads_never_fail(
-    repo: SqlDocumentRepository, tmp_path: Path
+    repo: SqlDocumentRepository, settings: Settings, tmp_path: Path
 ) -> None:
-    app = build_app(Settings(storage_dir=tmp_path))
+    app = build_app(settings)
     async with (
         app.router.lifespan_context(app),
         AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c,
@@ -44,3 +62,25 @@ async def test_concurrent_identical_uploads_never_fail(
     assert sorted(r.status_code for r in rs) == [200, 200, 200, 200, 201]
     assert len({r.json()["id"] for r in rs}) == 1
     assert len(await asyncio.to_thread(lambda: list(tmp_path.iterdir()))) == 1
+
+
+async def test_new_upload_publishes_one_ingest_message(
+    repo: SqlDocumentRepository, settings: Settings
+) -> None:
+    app = build_app(settings)
+    async with (
+        app.router.lifespan_context(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as c,
+    ):
+        first = await c.post("/documents", files={"file": ("a.md", b"# a")})
+        await c.post("/documents", files={"file": ("b.md", b"# a")})  # duplicate
+    connection = AmqpConnection(settings.rabbitmq_url, connect_timeout=3.0)
+    try:
+        channel = await (await connection.get()).channel()
+        queue = await channel.declare_queue(f"{settings.amqp_prefix}.ingest", passive=True)
+        message = await queue.get(no_ack=True, fail=False)
+        assert message is not None
+        assert json.loads(message.body) == {"document_id": first.json()["id"]}
+        assert await queue.get(no_ack=True, fail=False) is None
+    finally:
+        await connection.close()

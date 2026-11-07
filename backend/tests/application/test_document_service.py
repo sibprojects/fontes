@@ -11,7 +11,7 @@ from fontes.application.documents import (
     FileTooLargeError,
 )
 from fontes.domain.documents import Document, DocumentStatus, UnsupportedSourceError
-from tests.fakes import InMemoryDocumentRepository, InMemoryFileStorage
+from tests.fakes import FakePublisher, InMemoryDocumentRepository, InMemoryFileStorage
 
 T0 = datetime(2026, 11, 5, 12, 0, tzinfo=UTC)
 T1 = T0 + timedelta(minutes=1)
@@ -28,8 +28,15 @@ def storage() -> InMemoryFileStorage:
 
 
 @pytest.fixture
-def svc(repo: InMemoryDocumentRepository, storage: InMemoryFileStorage) -> DocumentService:
-    return DocumentService(repo, storage, max_upload_bytes=100, clock=lambda: T0)
+def publisher() -> FakePublisher:
+    return FakePublisher()
+
+
+@pytest.fixture
+def svc(
+    repo: InMemoryDocumentRepository, storage: InMemoryFileStorage, publisher: FakePublisher
+) -> DocumentService:
+    return DocumentService(repo, storage, publisher, max_upload_bytes=100, clock=lambda: T0)
 
 
 async def test_upload_stores_file_and_queues_document(
@@ -78,7 +85,7 @@ async def test_upload_removes_file_when_row_insert_fails(
         raise RuntimeError("db down")
 
     repo.add = broken_add  # type: ignore[method-assign]
-    svc = DocumentService(repo, storage, max_upload_bytes=100, clock=lambda: T0)
+    svc = DocumentService(repo, storage, FakePublisher(), max_upload_bytes=100, clock=lambda: T0)
     with pytest.raises(RuntimeError, match="db down"):
         await svc.upload("a.pdf", b"x")
     assert storage.files == {}
@@ -94,7 +101,9 @@ async def test_list_newest_first(
     repo: InMemoryDocumentRepository, storage: InMemoryFileStorage
 ) -> None:
     times = iter([T0, T1])
-    svc = DocumentService(repo, storage, max_upload_bytes=100, clock=lambda: next(times))
+    svc = DocumentService(
+        repo, storage, FakePublisher(), max_upload_bytes=100, clock=lambda: next(times)
+    )
     first = await svc.upload("a.pdf", b"1")
     second = await svc.add_url("https://e.com/x")
     assert await svc.list() == [second.document, first.document]
@@ -160,3 +169,34 @@ async def test_concurrent_duplicate_url_returns_existing(
     repo.find_by_url = lookup_misses_once  # type: ignore[method-assign]
     second = await svc.add_url("https://e.com/x")
     assert not second.created and second.document.id == first.document.id
+
+
+async def test_upload_publishes_new_document(
+    svc: DocumentService, publisher: FakePublisher
+) -> None:
+    r = await svc.upload("a.pdf", b"x")
+    assert publisher.published == [r.document.id]
+
+
+async def test_duplicate_upload_does_not_publish(
+    svc: DocumentService, publisher: FakePublisher
+) -> None:
+    first = await svc.upload("a.pdf", b"same")
+    await svc.upload("b.pdf", b"same")
+    assert publisher.published == [first.document.id]
+
+
+async def test_add_url_publishes(svc: DocumentService, publisher: FakePublisher) -> None:
+    a = await svc.add_url("https://e.com/x")
+    await svc.add_url("https://e.com/x")
+    assert publisher.published == [a.document.id]
+
+
+async def test_upload_succeeds_when_publish_fails(
+    repo: InMemoryDocumentRepository, storage: InMemoryFileStorage
+) -> None:
+    svc = DocumentService(repo, storage, FakePublisher(fail=True), max_upload_bytes=100)
+    r = await svc.upload("a.pdf", b"x")
+    assert r.created
+    stored = await repo.get(r.document.id)
+    assert stored is not None and stored.status == DocumentStatus.QUEUED

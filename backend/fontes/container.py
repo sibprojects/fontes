@@ -8,6 +8,8 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from fontes.adapters.messaging.connection import AmqpConnection
 from fontes.adapters.messaging.health import RabbitMQHealthCheck
+from fontes.adapters.messaging.publisher import AmqpPublisher
+from fontes.adapters.messaging.topology import Topology
 from fontes.adapters.persistence.documents import SqlDocumentRepository
 from fontes.adapters.persistence.health import PostgresHealthCheck
 from fontes.adapters.storage.local import LocalFileStorage
@@ -35,6 +37,7 @@ def build_app(settings: Settings) -> FastAPI:
     documents = DocumentService(
         SqlDocumentRepository(async_sessionmaker(engine, expire_on_commit=False)),
         LocalFileStorage(settings.storage_dir),
+        AmqpPublisher(amqp, Topology(settings.amqp_prefix, settings.ingest_retry_delay_ms)),
         max_upload_bytes=settings.max_upload_bytes,
     )
     return create_app(

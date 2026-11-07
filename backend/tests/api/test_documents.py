@@ -7,7 +7,7 @@ from httpx import ASGITransport, AsyncClient
 from fontes.api.app import create_app
 from fontes.api.limits import MULTIPART_OVERHEAD_BYTES
 from fontes.application.documents import DocumentService
-from tests.fakes import InMemoryDocumentRepository, InMemoryFileStorage
+from tests.fakes import FakePublisher, InMemoryDocumentRepository, InMemoryFileStorage
 
 LIMIT = 100
 
@@ -19,7 +19,9 @@ def storage() -> InMemoryFileStorage:
 
 @pytest.fixture
 async def c(storage: InMemoryFileStorage) -> AsyncIterator[AsyncClient]:
-    service = DocumentService(InMemoryDocumentRepository(), storage, max_upload_bytes=LIMIT)
+    service = DocumentService(
+        InMemoryDocumentRepository(), storage, FakePublisher(), max_upload_bytes=LIMIT
+    )
     app = create_app([], health_timeout=1.0, documents=service, max_upload_bytes=LIMIT)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
