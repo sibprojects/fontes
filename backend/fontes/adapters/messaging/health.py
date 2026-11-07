@@ -1,20 +1,24 @@
-import aio_pika
 from yarl import URL
 
 from fontes.adapters.errors import scrub
+from fontes.adapters.messaging.connection import AmqpConnection
 
 
 class RabbitMQHealthCheck:
+    """Checks the app's shared broker connection instead of opening a new one per request."""
+
     name = "rabbitmq"
 
-    def __init__(self, url: str, connect_timeout: float = 3.0) -> None:
-        self._url = url
-        self._connect_timeout = connect_timeout
+    def __init__(self, connection: AmqpConnection) -> None:
+        self._connection = connection
 
     async def check(self) -> None:
         try:
-            connection = await aio_pika.connect(self._url, timeout=self._connect_timeout)
-            await connection.close()
+            connection = await self._connection.get()
+            if not connection.connected.is_set():
+                raise ConnectionError("connection lost, reconnecting")
+        except TimeoutError:
+            raise RuntimeError("rabbitmq unavailable: connect timed out") from None
         except Exception as exc:
-            detail = scrub(str(exc), URL(self._url).password)
+            detail = scrub(str(exc), URL(self._connection.url).password)
             raise RuntimeError(f"rabbitmq unavailable: {type(exc).__name__}: {detail}") from None

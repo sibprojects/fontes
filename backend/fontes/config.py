@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     health_check_timeout: float = 3.0
     storage_dir: Path = Path("./data/uploads")
     max_upload_bytes: int = 20 * 1024 * 1024
+    amqp_prefix: str = "fontes"
+    ingest_max_attempts: int = 3
+    ingest_retry_delay_ms: int = 5000
+    worker_prefetch: int = 1
+    stub_processing_seconds: float = 1.0
 
 
 @lru_cache

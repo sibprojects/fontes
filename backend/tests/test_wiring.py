@@ -28,4 +28,4 @@ async def test_app_starts_and_reports_hung_dependencies() -> None:
     checks = r.json()["checks"]
     assert set(checks) == {"database", "rabbitmq"}
     assert checks["database"] != "ok"
-    assert checks["rabbitmq"] != "ok"
+    assert "connect timed out" in checks["rabbitmq"]
