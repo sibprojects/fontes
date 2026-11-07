@@ -17,12 +17,16 @@ services:
 
   rabbitmq:
     image: rabbitmq:4-management
+    # A fixed node name plus a volume keep durable queues and messages across `down`/`up`.
+    hostname: rabbitmq
     environment:
       RABBITMQ_DEFAULT_USER: fontes
       RABBITMQ_DEFAULT_PASS: fontes
     ports:
       - "5672:5672"
       - "15672:15672"
+    volumes:
+      - rabbitmq:/var/lib/rabbitmq
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 10s
@@ -83,4 +87,5 @@ services:
 
 volumes:
   pgdata:
+  rabbitmq:
   uploads:

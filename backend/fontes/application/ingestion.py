@@ -59,11 +59,19 @@ class IngestionService:
             return await self._finish(doc.id, DocumentStatus.FAILED, error)
         return await self._finish(doc.id, DocumentStatus.READY, None)
 
-    async def requeue_queued(self) -> int:
-        queued = await self._repo.list_by_status(DocumentStatus.QUEUED)
-        for doc in queued:
+    async def requeue_unfinished(self) -> int:
+        """Publish every queued or processing document; meant for worker startup.
+
+        With a single worker, a `processing` row at startup has no live message behind it.
+        Duplicates of messages still in the queues are harmless: processing is idempotent.
+        """
+        unfinished = [
+            *await self._repo.list_by_status(DocumentStatus.QUEUED),
+            *await self._repo.list_by_status(DocumentStatus.PROCESSING),
+        ]
+        for doc in unfinished:
             await self._publisher.publish_ingest(doc.id)
-        return len(queued)
+        return len(unfinished)
 
     async def _finish(
         self, document_id: UUID, status: DocumentStatus, error: str | None

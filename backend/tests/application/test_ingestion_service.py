@@ -117,15 +117,19 @@ async def test_document_deleted_during_failed_attempt_is_discarded() -> None:
     assert await repo.list() == []
 
 
-async def test_requeue_queued_publishes_only_queued() -> None:
+async def test_requeue_unfinished_publishes_queued_and_processing() -> None:
+    # On worker start a `processing` row is an orphan: its message died with the last worker,
+    # was lost with the broker, or went to the DLQ while the database was down.
     repo, publisher = InMemoryDocumentRepository(), FakePublisher()
     queued = await _queued(repo, "a.pdf")
     ready = await _queued(repo, "b.pdf")
     failed = await _queued(repo, "c.pdf")
+    stuck = await _queued(repo, "d.pdf")
     await repo.set_status(ready.id, DocumentStatus.READY)
     await repo.set_status(failed.id, DocumentStatus.FAILED, "boom")
-    assert await _service(repo, FakeProcessor(), publisher).requeue_queued() == 1
-    assert publisher.published == [queued.id]
+    await repo.set_status(stuck.id, DocumentStatus.PROCESSING)
+    assert await _service(repo, FakeProcessor(), publisher).requeue_unfinished() == 2
+    assert publisher.published == [queued.id, stuck.id]
 
 
 async def test_redelivery_past_attempt_limit_dead_letters_without_processing() -> None:

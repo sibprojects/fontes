@@ -30,9 +30,10 @@ class Worker:
     async def run(self, stop: asyncio.Event) -> None:
         try:
             await self._consumer.start()
-            # Documents whose message never reached the broker (it was down at upload time).
-            requeued = await self._service.requeue_queued()
-            log.info("Worker started; requeued %d queued document(s)", requeued)
+            # Documents whose message was lost: the broker was down at upload time, or the
+            # message died with the previous worker or broker, or was dead-lettered by crashes.
+            requeued = await self._service.requeue_unfinished()
+            log.info("Worker started; requeued %d unfinished document(s)", requeued)
             await stop.wait()
         finally:
             await self._consumer.stop()
