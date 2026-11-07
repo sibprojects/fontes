@@ -29,8 +29,9 @@ curl localhost:8000/health
 |---|---|
 | API | http://localhost:8000 (OpenAPI docs at `/docs`) |
 | RabbitMQ management | http://localhost:15672 (login `fontes` / `fontes`) |
+| Worker | no port: consumes the ingest queue (`docker compose logs -f worker`) |
 
-Database migrations run automatically: the one-shot `migrate` service applies them before `api` starts.
+Database migrations run automatically: the one-shot `migrate` service applies them before `api` and `worker` start.
 
 ## API
 
@@ -50,7 +51,35 @@ curl localhost:8000/documents
 curl -X DELETE localhost:8000/documents/<id>
 ```
 
-New documents stay `queued` for now: ingestion (parsing, chunking, embeddings) arrives in the next milestones.
+A new document starts as `queued` and the worker takes it to `ready`; see [How ingestion works](#how-ingestion-works).
+
+## How ingestion works
+
+Adding a document saves it as `queued` and publishes `{"document_id": "..."}` to RabbitMQ. The `worker` service consumes it, marks the document `processing`, processes it and marks it `ready`. Processing is a stub for now (it waits one second); parsing, chunking and embeddings arrive in the next milestone. The Postgres row is the source of truth for status; RabbitMQ only carries the work.
+
+```mermaid
+flowchart LR
+    api[api] -->|publish| main[fontes.ingest]
+    main --> worker[worker]
+    worker -->|transient error| retry[fontes.ingest.retry<br/>TTL 5 s]
+    retry -->|expires| main
+    worker -->|permanent error or<br/>attempts used up| dlq[fontes.ingest.dlq]
+```
+
+- **Ack after the work.** A message is acked only after the document's new status is written, or after its retry or DLQ copy is confirmed by the broker. If the worker dies mid-way, RabbitMQ redelivers the message.
+- **Retries.** A transient failure (say, a service is unreachable) puts the document back to `queued` and sends the message to `fontes.ingest.retry`. After a fixed 5 s TTL it flows back into the main queue. Attempts are counted in Postgres; after 3 the document is `failed` with the error stored, and the message goes to the DLQ with the error in the `x-fontes-error` header.
+- **No loops.** A permanent failure (a corrupt file) goes to the DLQ at once. A message that is not valid JSON goes straight to the DLQ. If the worker itself crashes on a message, the crash count travels in the `x-fontes-crashes` header and the DLQ takes it after 3.
+- **Idempotent.** A redelivered message for a `ready` document does nothing; one for a deleted document is dropped.
+- **Broker down at upload time.** The upload still succeeds and the document stays `queued`. On startup the worker republishes every `queued` document, so nothing is lost.
+
+To watch it, open the management UI at http://localhost:15672 → **Queues**: the three `fontes.ingest*` queues, their message rates, and (via **Get messages** on the DLQ) the failed messages with their error headers. `docker compose logs -f worker` shows each outcome.
+
+Settings (environment variables): `INGEST_MAX_ATTEMPTS` (3), `INGEST_RETRY_DELAY_MS` (5000), `WORKER_PREFETCH` (1), `STUB_PROCESSING_SECONDS` (1.0). The retry delay is a queue argument: after changing it, delete `fontes.ingest.retry` so it is declared again.
+
+## Why not Celery
+
+- **The stack is async end to end.** FastAPI, SQLAlchemy and `aio-pika` all run on one asyncio event loop. Celery's workers are synchronous at heart, so async code would need a bridge in every task.
+- **The queue topology is explicit on purpose.** Queues, the TTL-based retry queue, the dead-letter queue and the ack rules are written out in `backend/fontes/adapters/messaging/` and can be read in one sitting. A framework would hide exactly the part this project means to show.
 
 ## Development
 
@@ -74,4 +103,8 @@ docker compose up -d postgres rabbitmq
 cd backend && uv run pytest -m integration
 ```
 
-CI runs all of the above on every push and pull request to `main`.
+CI runs all of the above on every push and pull request to `main`. A second job then builds the image, starts the whole stack with Compose and runs `scripts/smoke.sh`, which uploads a file and waits for it to become `ready`. You can run the same check against your local stack:
+
+```bash
+scripts/smoke.sh   # or: scripts/smoke.sh http://host:8000
+```

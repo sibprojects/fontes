@@ -66,3 +66,23 @@ jobs:
 
       - name: Integration tests
         run: uv run pytest -m integration -v
+
+  compose-smoke:
+    needs: backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build and start the stack
+        run: docker compose up -d --build --wait api worker
+
+      - name: Smoke test
+        run: scripts/smoke.sh
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down
+        if: always()
+        run: docker compose down -v
