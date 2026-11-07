@@ -1,4 +1,5 @@
 import builtins
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from uuid import UUID
 
@@ -64,3 +65,34 @@ class InMemoryFileStorage:
 
     async def delete(self, key: str) -> None:
         self.files.pop(key, None)
+
+
+class FakePublisher:
+    def __init__(self, fail: bool = False) -> None:
+        self.published: list[UUID] = []
+        self.fail = fail
+
+    async def publish_ingest(self, document_id: UUID) -> None:
+        if self.fail:
+            raise ConnectionError("broker down")
+        self.published.append(document_id)
+
+
+class FakeProcessor:
+    """Raises the queued exceptions one per call; succeeds once the queue is empty."""
+
+    def __init__(
+        self,
+        errors: list[Exception] | None = None,
+        on_process: Callable[[Document], Awaitable[None]] | None = None,
+    ) -> None:
+        self.errors = list(errors or [])
+        self.on_process = on_process
+        self.calls = 0
+
+    async def process(self, doc: Document) -> None:
+        self.calls += 1
+        if self.on_process is not None:
+            await self.on_process(doc)
+        if self.errors:
+            raise self.errors.pop(0)
