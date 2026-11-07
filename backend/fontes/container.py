@@ -44,6 +44,7 @@ def build_app(settings: Settings) -> FastAPI:
         LocalFileStorage(settings.storage_dir),
         AmqpPublisher(amqp, Topology(settings.amqp_prefix, settings.ingest_retry_delay_ms)),
         max_upload_bytes=settings.max_upload_bytes,
+        publish_timeout=settings.publish_timeout_seconds,
     )
     return create_app(
         checks,

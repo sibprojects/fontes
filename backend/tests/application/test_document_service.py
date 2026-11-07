@@ -1,6 +1,7 @@
+import asyncio
 import hashlib
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -197,6 +198,25 @@ async def test_upload_succeeds_when_publish_fails(
 ) -> None:
     svc = DocumentService(repo, storage, FakePublisher(fail=True), max_upload_bytes=100)
     r = await svc.upload("a.pdf", b"x")
+    assert r.created
+    stored = await repo.get(r.document.id)
+    assert stored is not None and stored.status == DocumentStatus.QUEUED
+
+
+class HangingPublisher:
+    """A broker that accepts the connection but never confirms (e.g. a disk alarm)."""
+
+    async def publish_ingest(self, document_id: UUID) -> None:
+        await asyncio.Event().wait()
+
+
+async def test_upload_does_not_hang_when_publish_never_confirms(
+    repo: InMemoryDocumentRepository, storage: InMemoryFileStorage
+) -> None:
+    svc = DocumentService(
+        repo, storage, HangingPublisher(), max_upload_bytes=100, publish_timeout=0.05
+    )
+    r = await asyncio.wait_for(svc.upload("a.pdf", b"x"), timeout=2)
     assert r.created
     stored = await repo.get(r.document.id)
     assert stored is not None and stored.status == DocumentStatus.QUEUED

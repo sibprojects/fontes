@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     ingest_retry_delay_ms: int = 5000
     worker_prefetch: int = 1
     stub_processing_seconds: float = 1.0
+    publish_timeout_seconds: float = 3.0
 
 
 @lru_cache

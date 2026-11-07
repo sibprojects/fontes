@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import logging
 from collections.abc import Callable
@@ -46,12 +47,14 @@ class DocumentService:
         publisher: MessagePublisher,
         max_upload_bytes: int,
         clock: Callable[[], datetime] = _utc_now,
+        publish_timeout: float = 3.0,
     ) -> None:
         self._repo = repo
         self._storage = storage
         self._publisher = publisher
         self._max_upload_bytes = max_upload_bytes
         self._clock = clock
+        self._publish_timeout = publish_timeout
 
     async def upload(self, filename: str, data: bytes) -> AddResult:
         if not data:
@@ -93,7 +96,9 @@ class DocumentService:
         # The document is already saved as queued; if the broker is down, the worker's
         # startup sweep publishes it later, so the upload itself still succeeds.
         try:
-            await self._publisher.publish_ingest(doc.id)
+            # Bounded: a broker that accepts but never confirms must not hang the upload.
+            async with asyncio.timeout(self._publish_timeout):
+                await self._publisher.publish_ingest(doc.id)
         except Exception as exc:
             log.warning("Could not publish document %s for ingestion: %r", doc.id, exc)
         return AddResult(doc, created=True)
