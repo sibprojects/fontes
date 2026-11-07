@@ -132,7 +132,8 @@ async def test_retry_comes_back_after_ttl(amqp: tuple[AmqpConnection, Topology])
         await consumer.stop()
     (first_id, first_at), (second_id, second_at) = handler.calls
     assert first_id == second_id == document_id
-    assert second_at - first_at >= 0.2
+    # TTL is 0.2 s; leave slack for clock granularity (~15 ms on Windows).
+    assert second_at - first_at >= 0.15
     assert await _count(connection, topology.dlq) == 0
 
 
