@@ -1,8 +1,12 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, Index, Integer, Text, text
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, Text, UniqueConstraint, text
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+
+# Must match Settings.embedding_dimension and migration 0002 (a test pins the latter).
+EMBEDDING_DIMENSION = 1024
 
 
 class Base(DeclarativeBase):
@@ -32,4 +36,21 @@ class DocumentRow(Base):
         ),
         Index("uq_documents_url", "url", unique=True, postgresql_where=text("url IS NOT NULL")),
         Index("ix_documents_created_at", "created_at"),
+    )
+
+
+class ChunkRow(Base):
+    __tablename__ = "chunks"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    document_id: Mapped[UUID] = mapped_column(ForeignKey("documents.id", ondelete="CASCADE"))
+    ordinal: Mapped[int] = mapped_column(Integer)
+    text: Mapped[str] = mapped_column(Text)
+    page_start: Mapped[int | None] = mapped_column(Integer)
+    page_end: Mapped[int | None] = mapped_column(Integer)
+    section: Mapped[str | None] = mapped_column(Text)
+    embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIMENSION))
+
+    __table_args__ = (
+        UniqueConstraint("document_id", "ordinal", name="uq_chunks_document_ordinal"),
     )

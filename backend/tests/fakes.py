@@ -1,9 +1,10 @@
 import builtins
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
 from uuid import UUID
 
 from fontes.application.ports.documents import DuplicateDocumentError
+from fontes.domain.chunks import Chunk
 from fontes.domain.documents import Document, DocumentStatus
 
 
@@ -54,6 +55,32 @@ class InMemoryDocumentRepository:
         return sorted(
             (d for d in self.rows.values() if d.status == status), key=lambda d: d.created_at
         )
+
+
+class InMemoryChunkRepository:
+    def __init__(self, documents: InMemoryDocumentRepository) -> None:
+        self._documents = documents
+        self.rows: dict[UUID, list[Chunk]] = {}
+        self.embeddings: dict[UUID, list[list[float]]] = {}
+
+    async def replace(
+        self,
+        document_id: UUID,
+        chunks: Sequence[Chunk],
+        embeddings: Sequence[Sequence[float]],
+    ) -> bool:
+        if len(chunks) != len(embeddings):
+            raise ValueError(f"{len(chunks)} chunks but {len(embeddings)} embeddings")
+        if document_id not in self._documents.rows:
+            return False
+        self.rows[document_id] = list(chunks)
+        self.embeddings[document_id] = [list(v) for v in embeddings]
+        return True
+
+    async def list_for_document(self, document_id: UUID) -> builtins.list[Chunk]:
+        if document_id not in self._documents.rows:  # mirrors the cascade delete
+            return []
+        return sorted(self.rows.get(document_id, []), key=lambda c: c.ordinal)
 
 
 class InMemoryFileStorage:

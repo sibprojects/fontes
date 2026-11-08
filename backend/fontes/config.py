@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     worker_prefetch: int = 1
     stub_processing_seconds: float = 1.0
     publish_timeout_seconds: float = 3.0
+    # Fixed by migration 0002; a different model dimension needs a new migration.
+    embedding_dimension: int = 1024
 
 
 @lru_cache

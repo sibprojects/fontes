@@ -3,7 +3,18 @@ from pathlib import Path
 
 import fontes
 
-FORBIDDEN = {"fastapi", "sqlalchemy", "aio_pika", "anthropic", "ollama", "httpx", "asyncpg"}
+FORBIDDEN = {
+    "fastapi",
+    "sqlalchemy",
+    "aio_pika",
+    "anthropic",
+    "ollama",
+    "httpx",
+    "asyncpg",
+    "pgvector",
+    "pypdf",
+    "bs4",
+}
 INNER_LAYERS = ("domain", "application")
 ROOT = Path(fontes.__file__).parent
 
