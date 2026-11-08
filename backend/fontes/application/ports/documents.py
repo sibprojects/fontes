@@ -47,6 +47,10 @@ class DocumentRepository(Protocol):
 class FileStorage(Protocol):
     async def save(self, key: str, data: bytes) -> None: ...
 
+    async def read(self, key: str) -> bytes:
+        """Raise FileNotFoundError if there is no such file."""
+        ...
+
     async def delete(self, key: str) -> None:
         """Remove the file; a missing key is not an error."""
         ...

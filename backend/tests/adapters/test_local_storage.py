@@ -33,3 +33,14 @@ async def test_creates_root_lazily(tmp_path: Path) -> None:
     assert not root.exists()
     await storage.save("k.md", b"# hi")
     assert (root / "k.md").read_bytes() == b"# hi"
+
+
+async def test_read_returns_saved_bytes(tmp_path: Path) -> None:
+    storage = LocalFileStorage(tmp_path)
+    await storage.save("k.md", b"# hi")
+    assert await storage.read("k.md") == b"# hi"
+
+
+async def test_read_missing_raises_file_not_found(tmp_path: Path) -> None:
+    with pytest.raises(FileNotFoundError):
+        await LocalFileStorage(tmp_path).read("nope.md")

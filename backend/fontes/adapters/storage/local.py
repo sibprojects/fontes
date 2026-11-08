@@ -22,6 +22,9 @@ class LocalFileStorage:
 
         await asyncio.to_thread(write)
 
+    async def read(self, key: str) -> bytes:
+        return await asyncio.to_thread(self._path(key).read_bytes)
+
     async def delete(self, key: str) -> None:
         path = self._path(key)
         await asyncio.to_thread(path.unlink, missing_ok=True)

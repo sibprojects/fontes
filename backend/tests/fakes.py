@@ -91,6 +91,12 @@ class InMemoryFileStorage:
     async def save(self, key: str, data: bytes) -> None:
         self.files[key] = data
 
+    async def read(self, key: str) -> bytes:
+        try:
+            return self.files[key]
+        except KeyError:
+            raise FileNotFoundError(key) from None
+
     async def delete(self, key: str) -> None:
         self.files.pop(key, None)
 

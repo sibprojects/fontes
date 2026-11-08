@@ -7,6 +7,7 @@ dependencies = [
     "aio-pika",
     "alembic>=1.20.1",
     "asyncpg",
+    "beautifulsoup4>=4.15.0",
     "fastapi",
     "httpx>=0.28.1",
     "pgvector>=0.5.1",
