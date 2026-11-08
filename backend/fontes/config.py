@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     publish_timeout_seconds: float = 3.0
     # Fixed by migration 0002; a different model dimension needs a new migration.
     embedding_dimension: int = 1024
+    ollama_url: str = "http://localhost:11434"
+    embedding_model: str = "bge-m3"
+    embed_batch_size: int = 16
+    ollama_timeout_seconds: float = 120.0
 
 
 @lru_cache

@@ -1,4 +1,5 @@
 import builtins
+import hashlib
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
 from uuid import UUID
@@ -123,3 +124,22 @@ class FakeProcessor:
             await self.on_process(doc)
         if self.errors:
             raise self.errors.pop(0)
+
+
+class FakeEmbedder:
+    """Deterministic vectors derived from a hash of each text."""
+
+    def __init__(self, dimension: int = 1024, fail: Exception | None = None) -> None:
+        self.dimension = dimension
+        self.fail = fail
+        self.calls: list[list[str]] = []
+
+    async def embed(self, texts: Sequence[str]) -> list[list[float]]:
+        self.calls.append(list(texts))
+        if self.fail is not None:
+            raise self.fail
+        return [self._vector(t) for t in texts]
+
+    def _vector(self, text: str) -> list[float]:
+        digest = hashlib.sha256(text.encode()).digest()
+        return [digest[i % len(digest)] / 255 for i in range(self.dimension)]
