@@ -10,6 +10,7 @@ _SPACES = re.compile(r"[ \t]+")
 _BLANK_LINES = re.compile(r"\n{3,}")
 _SENTENCE_ENDS = (". ", "! ", "? ")
 _SEPARATOR = "\n\n"
+MAX_SECTION_CHARS = 200
 
 
 def _normalize(text: str) -> str:
@@ -19,11 +20,26 @@ def _normalize(text: str) -> str:
     return _BLANK_LINES.sub(_SEPARATOR, text).strip()
 
 
+def _normalize_section(section: str | None) -> str | None:
+    """One line, bounded: a heading is a citation label, not content."""
+    if section is None:
+        return None
+    title = " ".join(_normalize(section).split())
+    if len(title) > MAX_SECTION_CHARS:
+        title = title[: MAX_SECTION_CHARS - 1].rstrip() + "…"
+    return title or None
+
+
 @dataclass(frozen=True)
 class _Span:
     start: int
     end: int
     page: int | None
+    section: str | None
+
+
+# text, page_start, page_end, section
+_Piece = tuple[str, int | None, int | None, str | None]
 
 
 class Chunker:
@@ -41,8 +57,8 @@ class Chunker:
     def split(self, segments: Sequence[Segment]) -> list[Chunk]:
         chunks: list[Chunk] = []
         for group in self._group(segments):
-            for text, page_start, page_end in self._pieces(group):
-                chunks.append(Chunk(len(chunks), text, page_start, page_end, group[0].section))
+            for text, page_start, page_end, section in self._pieces(group):
+                chunks.append(Chunk(len(chunks), text, page_start, page_end, section))
         return chunks
 
     def _group(self, segments: Sequence[Segment]) -> list[list[Segment]]:
@@ -52,7 +68,7 @@ class Chunker:
             text = _normalize(segment.text)
             if not text:
                 continue
-            segment = Segment(text, segment.page, segment.section)
+            segment = Segment(text, segment.page, _normalize_section(segment.section))
             current = groups[-1] if groups else None
             key = (segment.page, segment.section)
             if current is not None and (
@@ -65,15 +81,15 @@ class Chunker:
                 size = len(text)
         return groups
 
-    def _pieces(self, group: list[Segment]) -> list[tuple[str, int | None, int | None]]:
+    def _pieces(self, group: list[Segment]) -> list[_Piece]:
         spans: list[_Span] = []
         offset = 0
         for segment in group:
-            spans.append(_Span(offset, offset + len(segment.text), segment.page))
+            spans.append(_Span(offset, offset + len(segment.text), segment.page, segment.section))
             offset += len(segment.text) + len(_SEPARATOR)
         text = _SEPARATOR.join(segment.text for segment in group)
 
-        pieces: list[tuple[str, int | None, int | None]] = []
+        pieces: list[_Piece] = []
         start = 0
         while start < len(text):
             cut = len(text) if len(text) - start <= self._max else self._cut(text, start)
@@ -81,7 +97,9 @@ class Chunker:
             pages = [s.page for s in overlapped if s.page is not None]
             piece = text[start:cut].strip()
             if piece:
-                pieces.append((piece, min(pages, default=None), max(pages, default=None)))
+                # Cite the section the piece starts in: its nearest preceding heading.
+                section = overlapped[0].section if overlapped else group[0].section
+                pieces.append((piece, min(pages, default=None), max(pages, default=None), section))
             if cut == len(text):
                 break
             start = self._next_start(text, start, cut)

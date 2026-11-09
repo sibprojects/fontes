@@ -123,7 +123,9 @@ def _pipeline(
         SourceType.MARKDOWN: StoredFileLoader(storage, parse_markdown),
         SourceType.HTML: StoredFileLoader(storage, parse_html),
         SourceType.URL: UrlLoader(
-            max_bytes=settings.max_upload_bytes, timeout=settings.url_fetch_timeout_seconds
+            max_bytes=settings.max_upload_bytes,
+            timeout=settings.url_fetch_timeout_seconds,
+            deadline=settings.url_fetch_deadline_seconds,
         ),
     }
     chunker = Chunker(

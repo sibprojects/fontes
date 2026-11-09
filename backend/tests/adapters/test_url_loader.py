@@ -1,4 +1,5 @@
-from collections.abc import Awaitable, Callable
+import asyncio
+from collections.abc import AsyncIterator, Awaitable, Callable
 from datetime import UTC, datetime
 
 import httpx
@@ -173,3 +174,29 @@ async def test_default_resolver_rejects_localhost() -> None:
     with pytest.raises(PermanentIngestionError, match="private or local"):
         await _load(loader, "http://localhost:8000/health")
     assert handler.requests == []
+
+
+async def test_charset_from_content_type_header_is_used() -> None:
+    body = "<body><h1>Привет мир</h1><p>Текст</p></body>".encode("cp1251")
+    headers = {"content-type": "text/html; charset=windows-1251"}
+    handler = Recorder(httpx.Response(200, headers=headers, content=body))
+    assert await _load(_loader(handler)) == [Segment("Привет мир\nТекст", section="Привет мир")]
+
+
+async def test_slow_trickling_page_hits_the_overall_deadline() -> None:
+    async def trickle() -> AsyncIterator[bytes]:
+        while True:
+            yield b"<p>x</p>"
+            await asyncio.sleep(0.05)
+
+    handler = Recorder(httpx.Response(200, headers=HTML, content=trickle()))
+    loader = UrlLoader(
+        max_bytes=100_000,
+        timeout=5.0,
+        deadline=0.3,
+        transport=httpx.MockTransport(handler),
+        resolve=_resolver(),
+    )
+    with pytest.raises(TimeoutError, match="0.3") as info:
+        await asyncio.wait_for(_load(loader), timeout=5)
+    assert not isinstance(info.value, PermanentIngestionError)

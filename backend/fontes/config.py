@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     embed_batch_size: int = 16
     ollama_timeout_seconds: float = 120.0
     url_fetch_timeout_seconds: float = 20.0
+    url_fetch_deadline_seconds: float = 60.0
     chunk_max_chars: int = 1500
     chunk_overlap_chars: int = 200
     chunk_min_chars: int = 300

@@ -1,4 +1,7 @@
+import pytest
+
 from fontes.adapters.loaders.html import parse_html
+from fontes.application.ports.ingestion import PermanentIngestionError
 from fontes.domain.chunks import Segment
 
 
@@ -52,3 +55,30 @@ def test_inline_elements_stay_on_one_line() -> None:
 def test_deeply_nested_markup_does_not_hit_recursion_limit() -> None:
     html = b"<body>" + b"<div>" * 5000 + b"deep" + b"</div>" * 5000 + b"</body>"
     assert _text(parse_html(html)) == "deep"
+
+
+def test_article_header_is_kept_but_page_header_removed() -> None:
+    html = b"""<body><header>Site logo</header><article><header><h1>Post title</h1></header>
+    <p>Post body</p><footer>Posted by Ann</footer></article><footer>Copyright</footer></body>"""
+    segments = parse_html(html)
+    assert segments[0].section == "Post title"
+    text = _text(segments)
+    assert "Post body" in text and "Posted by Ann" in text
+    assert "Site logo" not in text and "Copyright" not in text
+
+
+def test_encoding_from_http_header_is_used() -> None:
+    html = "<body><h1>Привет мир</h1><p>Текст</p></body>".encode("cp1251")
+    assert parse_html(html, encoding="windows-1251") == [
+        Segment("Привет мир\nТекст", section="Привет мир")
+    ]
+
+
+def test_unexpected_parser_error_is_permanent(monkeypatch: pytest.MonkeyPatch) -> None:
+    def explode(*args: object, **kwargs: object) -> None:
+        raise RecursionError("too deep")
+
+    # The walk, not the parser: BeautifulSoup itself was already guarded.
+    monkeypatch.setattr("fontes.adapters.loaders.html._Segmenter", explode)
+    with pytest.raises(PermanentIngestionError, match="Could not parse HTML"):
+        parse_html(b"<p>x</p>")

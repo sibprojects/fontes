@@ -31,11 +31,13 @@ class UrlLoader:
         self,
         max_bytes: int,
         timeout: float,
+        deadline: float = 60.0,
         transport: httpx.AsyncBaseTransport | None = None,
         resolve: Callable[[str], Awaitable[list[str]]] | None = None,
     ) -> None:
         self._max_bytes = max_bytes
-        self._timeout = timeout
+        self._timeout = timeout  # per network operation
+        self._deadline = deadline  # for the whole fetch, redirects included
         self._transport = transport
         self._resolve = resolve or _getaddrinfo
 
@@ -45,10 +47,18 @@ class UrlLoader:
         async with httpx.AsyncClient(
             timeout=self._timeout, transport=self._transport, follow_redirects=False
         ) as client:
-            body = await self._fetch(client, httpx.URL(doc.url))
-        return await asyncio.to_thread(parse_html, body)
+            try:
+                # httpx's timeout is per read: a server trickling bytes would never trip it,
+                # and would hold the worker's only slot.
+                async with asyncio.timeout(self._deadline):
+                    body, encoding = await self._fetch(client, httpx.URL(doc.url))
+            except TimeoutError:
+                raise TimeoutError(
+                    f"Fetching {doc.url} took longer than {self._deadline:g}s"
+                ) from None
+        return await asyncio.to_thread(parse_html, body, encoding)
 
-    async def _fetch(self, client: httpx.AsyncClient, url: httpx.URL) -> bytes:
+    async def _fetch(self, client: httpx.AsyncClient, url: httpx.URL) -> tuple[bytes, str | None]:
         for _ in range(MAX_REDIRECTS + 1):
             await self._check_address(url)
             async with client.stream("GET", url) as response:
@@ -57,7 +67,7 @@ class UrlLoader:
                     continue
                 _check_status(response.status_code, url)
                 _check_content_type(response.headers.get("content-type", ""))
-                return await self._read_limited(response)
+                return await self._read_limited(response), response.charset_encoding
         raise PermanentIngestionError(f"Too many redirects (more than {MAX_REDIRECTS})")
 
     async def _check_address(self, url: httpx.URL) -> None:

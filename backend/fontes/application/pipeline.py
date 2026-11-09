@@ -31,9 +31,8 @@ class IngestionPipeline:
         segments = await loader.load(doc)
         chunks = await asyncio.to_thread(self._chunker.split, segments)
         if not chunks:
-            raise PermanentIngestionError(
-                "No text could be extracted (scanned PDFs are not supported)"
-            )
+            hint = " (scanned PDFs are not supported)" if doc.source_type == SourceType.PDF else ""
+            raise PermanentIngestionError(f"No text could be extracted{hint}")
         embeddings = await self._embedder.embed([c.text for c in chunks])
         # False means the document was deleted while we worked: nothing to keep.
         await self._chunks.replace(doc.id, chunks, embeddings)

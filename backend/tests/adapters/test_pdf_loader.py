@@ -40,3 +40,29 @@ def test_password_protected_pdf_is_permanent() -> None:
 
 def test_pdf_without_text_returns_no_segments() -> None:
     assert parse_pdf(make_pdf(["", ""])) == []
+
+
+def _encrypted(user_password: str) -> bytes:
+    writer = PdfWriter(clone_from=io.BytesIO(make_pdf(["Owner only"])))
+    writer.encrypt(user_password=user_password, owner_password="owner", algorithm="AES-256")
+    buffer = io.BytesIO()
+    writer.write(buffer)
+    return buffer.getvalue()
+
+
+def test_aes_pdf_with_owner_password_only_is_read() -> None:
+    assert [s.text for s in parse_pdf(_encrypted(""))] == ["Owner only"]
+
+
+def test_aes_pdf_with_user_password_is_permanent() -> None:
+    with pytest.raises(PermanentIngestionError, match="password"):
+        parse_pdf(_encrypted("pw"))
+
+
+def test_unexpected_parser_error_is_permanent(monkeypatch: pytest.MonkeyPatch) -> None:
+    def explode(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("pypdf bug")
+
+    monkeypatch.setattr("fontes.adapters.loaders.pdf.PdfReader", explode)
+    with pytest.raises(PermanentIngestionError, match="Could not read the PDF"):
+        parse_pdf(make_pdf(["x"]))

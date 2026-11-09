@@ -11,8 +11,6 @@ _REMOVED = (
     "template",
     "svg",
     "nav",
-    "header",
-    "footer",
     "aside",
     "form",
 )
@@ -54,14 +52,29 @@ class _Segmenter:
         self._lines = []
 
 
-def parse_html(data: bytes) -> list[Segment]:
-    """Visible text of the main content; h1–h6 start sections, block elements start lines."""
+# Page chrome, removed unless it belongs to the content (an article's own header holds its title).
+_CHROME = ("header", "footer")
+_CONTENT = ("article", "main")
+
+
+def parse_html(data: bytes, encoding: str | None = None) -> list[Segment]:
+    """Visible text of the main content; h1–h6 start sections, block elements start lines.
+
+    `encoding` (from an HTTP header) wins over `<meta charset>`, as in browsers.
+    """
     try:
-        soup = BeautifulSoup(data, "html.parser")  # decodes bytes, honouring <meta charset>
-    except Exception as exc:  # html.parser is lenient; this is a corrupt or binary file
-        raise PermanentIngestionError(f"Could not parse HTML: {exc}") from exc
+        return _parse(data, encoding)
+    except Exception as exc:  # the input is the only variable: a retry would fail the same way
+        raise PermanentIngestionError(f"Could not parse HTML: {exc!r}") from exc
+
+
+def _parse(data: bytes, encoding: str | None) -> list[Segment]:
+    soup = BeautifulSoup(data, "html.parser", from_encoding=encoding)
     for tag in soup.find_all(_REMOVED):
         tag.decompose()
+    for tag in soup.find_all(_CHROME):
+        if tag.find_parent(_CONTENT) is None:
+            tag.decompose()
     root = soup.find("main") or soup.find("article") or soup.body or soup
 
     out = _Segmenter()

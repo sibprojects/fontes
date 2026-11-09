@@ -8,6 +8,7 @@ dependencies = [
     "alembic>=1.20.1",
     "asyncpg",
     "beautifulsoup4>=4.15.0",
+    "cryptography>=50.0.2",
     "fastapi",
     "httpx>=0.28.1",
     "pgvector>=0.5.1",

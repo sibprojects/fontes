@@ -93,7 +93,7 @@ To watch it, open the management UI at http://localhost:15672 → **Queues**: th
 
 Settings (environment variables): `INGEST_MAX_ATTEMPTS` (3), `INGEST_RETRY_DELAY_MS` (5000), `WORKER_PREFETCH` (1), `PUBLISH_TIMEOUT_SECONDS` (3.0). The retry delay is a queue argument: after changing it, delete `fontes.ingest.retry` so it is declared again.
 
-Ingestion settings: `OLLAMA_URL` (`http://localhost:11434`; `http://ollama:11434` in Compose), `EMBEDDING_MODEL` (`bge-m3`), `EMBEDDING_DIMENSION` (1024), `EMBED_BATCH_SIZE` (16), `OLLAMA_TIMEOUT_SECONDS` (120.0), `URL_FETCH_TIMEOUT_SECONDS` (20.0), `CHUNK_MAX_CHARS` (1500), `CHUNK_OVERLAP_CHARS` (200), `CHUNK_MIN_CHARS` (300).
+Ingestion settings: `OLLAMA_URL` (`http://localhost:11434`; `http://ollama:11434` in Compose), `EMBEDDING_MODEL` (`bge-m3`), `EMBEDDING_DIMENSION` (1024), `EMBED_BATCH_SIZE` (16), `OLLAMA_TIMEOUT_SECONDS` (120.0), `URL_FETCH_TIMEOUT_SECONDS` (20.0, per network operation), `URL_FETCH_DEADLINE_SECONDS` (60.0, for the whole fetch), `CHUNK_MAX_CHARS` (1500), `CHUNK_OVERLAP_CHARS` (200), `CHUNK_MIN_CHARS` (300).
 
 ### Changing the embedding model
 

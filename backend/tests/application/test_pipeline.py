@@ -98,3 +98,18 @@ async def test_loader_permanent_error_passes_through() -> None:
     with pytest.raises(PermanentIngestionError) as info:
         await s.pipeline.process(await s.document())
     assert info.value is error
+
+
+async def test_no_text_message_mentions_scanned_pdfs_only_for_pdfs() -> None:
+    s = Setup(loader=FakeLoader([]))
+    with pytest.raises(PermanentIngestionError) as info:
+        await s.pipeline.process(await s.document())
+    assert "scanned" not in str(info.value)
+
+    pdf = Document.from_upload("scan.pdf", "hash-scan", now=NOW)
+    await s.docs.add(pdf)
+    pipeline = IngestionPipeline(
+        {SourceType.PDF: FakeLoader([])}, Chunker(1500, 200, 300), s.embedder, s.chunks
+    )
+    with pytest.raises(PermanentIngestionError, match="scanned PDFs are not supported"):
+        await pipeline.process(pdf)

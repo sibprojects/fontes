@@ -107,3 +107,30 @@ def test_invalid_sizes_raise() -> None:
         Chunker(100, 60, 50)
     with pytest.raises(ValueError):
         Chunker(100, 10, 0)
+
+
+def test_piece_inside_a_later_section_cites_that_section() -> None:
+    # A short title section absorbs the next one; pieces lying wholly under "Install" must
+    # still cite "Install", the nearest preceding heading.
+    segments = [
+        Segment("Title\nshort tagline", section="Title"),
+        Segment("Install\n" + _text(4000), section="Install"),
+    ]
+    sections = [c.section for c in _chunker().split(segments)]
+    assert sections[0] == "Title"
+    assert len(sections) > 2 and set(sections[1:]) == {"Install"}
+
+
+def test_section_title_is_normalized_to_one_line() -> None:
+    chunks = _chunker().split([Segment("body", section=" A\x00B\n\n  C\t D ")])
+    assert chunks[0].section == "AB C D"
+
+
+def test_section_title_is_capped() -> None:
+    chunks = _chunker().split([Segment("body", section="word " * 1000)])
+    assert chunks[0].section is not None and len(chunks[0].section) <= 200
+
+
+def test_blank_section_title_becomes_none() -> None:
+    chunks = _chunker().split([Segment("body", section=" \x00 ")])
+    assert chunks[0].section is None
