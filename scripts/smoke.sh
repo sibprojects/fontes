@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# End-to-end smoke test of a running stack: health, upload, and ingestion through the worker.
+# End-to-end smoke test of a running stack: health, upload, ingestion through the worker
+# (parse, chunk, embed with Ollama, store), and the stored chunks.
 # Usage: scripts/smoke.sh [base-url]   (default http://127.0.0.1:8000). Needs curl, grep, sed.
 set -euo pipefail
 
 BASE="${1:-http://127.0.0.1:8000}"
-TIMEOUT_SECONDS=30
+# The first embedding loads the model into memory, which can take a while on CPU.
+TIMEOUT_SECONDS=180
 
 echo "health: $(curl -fsS "$BASE/health")"
 
@@ -23,13 +25,24 @@ echo "uploaded $id"
 status=unknown
 deadline=$((SECONDS + TIMEOUT_SECONDS))
 while ((SECONDS < deadline)); do
-  status="$(curl -fsS "$BASE/documents" \
-    | grep -o "\"id\":\"$id\"[^}]*" \
-    | sed -n 's/.*"status":"\([a-z]*\)".*/\1/p')"
-  if [[ "$status" == "ready" ]]; then
-    echo "document $id is ready"
-    exit 0
-  fi
+  doc="$(curl -fsS "$BASE/documents" | grep -o "\"id\":\"$id\"[^}]*" || true)"
+  status="$(printf '%s' "$doc" | sed -n 's/.*"status":"\([a-z]*\)".*/\1/p')"
+  case "$status" in
+    ready)
+      echo "document $id is ready after $((SECONDS))s"
+      chunks="$(curl -fsS "$BASE/documents/$id/chunks")"
+      if [[ "$chunks" != *'"ordinal":0'* ]]; then
+        echo "document $id is ready but has no chunks: $chunks" >&2
+        exit 1
+      fi
+      echo "chunks: $chunks"
+      exit 0
+      ;;
+    failed)
+      echo "document $id failed: $(printf '%s' "$doc" | sed -n 's/.*"error":\(.*\),"attempts".*/\1/p')" >&2
+      exit 1
+      ;;
+  esac
   sleep 1
 done
 

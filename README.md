@@ -18,6 +18,8 @@ You need Docker with Compose.
 docker compose up --build
 ```
 
+The first start downloads the embedding model `bge-m3` (about 1.2 GB) into the `ollama` volume, which takes a few minutes; the worker starts once it is there. Later starts reuse the volume.
+
 To check that it works, run:
 
 ```bash
@@ -29,6 +31,7 @@ curl localhost:8000/health
 |---|---|
 | API | http://localhost:8000 (OpenAPI docs at `/docs`) |
 | RabbitMQ management | http://localhost:15672 (login `fontes` / `fontes`) |
+| Ollama | http://localhost:11434 (local embeddings) |
 | Worker | no port: consumes the ingest queue (`docker compose logs -f worker`) |
 
 Database migrations run automatically: the one-shot `migrate` service applies them before `api` and `worker` start.
@@ -40,7 +43,8 @@ Database migrations run automatically: the one-shot `migrate` service applies th
 | `POST` | `/documents` | Upload a file (multipart field `file`): `.pdf`, `.md`, `.markdown`, `.html`, `.htm`, up to 20 MiB |
 | `POST` | `/documents/url` | Add a web page by URL: `{"url": "https://..."}` |
 | `GET` | `/documents` | List documents, newest first |
-| `DELETE` | `/documents/{id}` | Delete a document and its stored file |
+| `GET` | `/documents/{id}/chunks` | The document's chunks in order: `[{"ordinal", "location", "text"}]` (empty until it is `ready`) |
+| `DELETE` | `/documents/{id}` | Delete a document, its stored file and its chunks |
 
 A new document is `201 Created`. Uploading the same content again, or adding the same URL, returns the existing document with `200 OK`. Errors come back as `{"detail": "..."}` with `400` (empty file), `413` (too large), `415` (unsupported type), `422` (invalid URL) or `404` (unknown id).
 
@@ -48,6 +52,7 @@ A new document is `201 Created`. Uploading the same content again, or adding the
 curl -F file=@notes.md localhost:8000/documents
 curl -H 'content-type: application/json' -d '{"url":"https://example.com"}' localhost:8000/documents/url
 curl localhost:8000/documents
+curl localhost:8000/documents/<id>/chunks
 curl -X DELETE localhost:8000/documents/<id>
 ```
 
@@ -55,7 +60,17 @@ A new document starts as `queued` and the worker takes it to `ready`; see [How i
 
 ## How ingestion works
 
-Adding a document saves it as `queued` and publishes `{"document_id": "..."}` to RabbitMQ. The `worker` service consumes it, marks the document `processing`, processes it and marks it `ready`. Processing is a stub for now (it waits one second); parsing, chunking and embeddings arrive in the next milestone. The Postgres row is the source of truth for status; RabbitMQ only carries the work.
+Adding a document saves it as `queued` and publishes `{"document_id": "..."}` to RabbitMQ. The `worker` service consumes it, marks the document `processing`, processes it and marks it `ready`. The Postgres row is the source of truth for status; RabbitMQ only carries the work.
+
+Processing means: extract the text, split it into chunks of up to about 1500 characters (with a 200-character overlap), embed each chunk with Ollama, and store the chunks and their vectors in Postgres (pgvector). A rerun replaces a document's chunks, so a retry never leaves duplicates.
+
+| Format | How a chunk is cited |
+|---|---|
+| PDF (`.pdf`) | page: `p. 4`, or `pp. 4–5` for a chunk that spans two pages |
+| Markdown (`.md`, `.markdown`) | the nearest heading above it |
+| HTML (`.html`, `.htm`) and web pages (by URL) | the nearest heading above it |
+
+When there is no heading, the chunk is cited by position: `part 3 of 12`. Web pages are fetched by the worker (HTML only, up to 20 MiB, up to 5 redirects).
 
 ```mermaid
 flowchart LR
@@ -68,6 +83,7 @@ flowchart LR
 
 - **Ack after the work.** A message is acked only after the document's new status is written, or after its retry or DLQ copy is confirmed by the broker. If the worker dies mid-way, RabbitMQ redelivers the message.
 - **Retries.** A transient failure (say, a service is unreachable) puts the document back to `queued` and sends the message to `fontes.ingest.retry`. After a fixed 5 s TTL it flows back into the main queue. Attempts are counted in Postgres; after 3 the document is `failed` with the error stored, and the message goes to the DLQ with the error in the `x-fontes-error` header.
+- **Permanent or transient.** A corrupt or password-protected PDF, a file with no extractable text, an unsupported content type or an HTTP 4xx from a URL is permanent: the document is `failed` at once. Ollama or Postgres being unreachable, a network error, or an HTTP 408, 429 or 5xx is transient and retried; the stored error says which service failed (for example `Cannot reach Ollama at http://ollama:11434`).
 - **No loops.** A permanent failure (a corrupt file) goes to the DLQ at once. A message that cannot be decoded (not JSON, or nested too deeply to parse) goes straight to the DLQ. If the handler raises unexpectedly (say, Postgres is down), the message is retried with a crash count in the `x-fontes-crashes` header and goes to the DLQ on the 4th crash. If the worker process dies outright, RabbitMQ redelivers the message; every delivery counts as an attempt, and once 3 are used up the next delivery marks the document `failed` ("Gave up after 3 attempts") without processing it again.
 - **Idempotent.** A redelivered or duplicate message for a `ready` or `failed` document does nothing; one for a deleted document is dropped.
 - **Broker down or stalled at upload time.** The upload still succeeds (publishing gives up after 3 s) and the document stays `queued`.
@@ -76,6 +92,22 @@ flowchart LR
 To watch it, open the management UI at http://localhost:15672 → **Queues**: the three `fontes.ingest*` queues, their message rates, and (via **Get messages** on the DLQ) the failed messages with their error headers. `docker compose logs -f worker` shows each outcome.
 
 Settings (environment variables): `INGEST_MAX_ATTEMPTS` (3), `INGEST_RETRY_DELAY_MS` (5000), `WORKER_PREFETCH` (1), `PUBLISH_TIMEOUT_SECONDS` (3.0). The retry delay is a queue argument: after changing it, delete `fontes.ingest.retry` so it is declared again.
+
+Ingestion settings: `OLLAMA_URL` (`http://localhost:11434`; `http://ollama:11434` in Compose), `EMBEDDING_MODEL` (`bge-m3`), `EMBEDDING_DIMENSION` (1024), `EMBED_BATCH_SIZE` (16), `OLLAMA_TIMEOUT_SECONDS` (120.0), `URL_FETCH_TIMEOUT_SECONDS` (20.0), `CHUNK_MAX_CHARS` (1500), `CHUNK_OVERLAP_CHARS` (200), `CHUNK_MIN_CHARS` (300).
+
+### Changing the embedding model
+
+The vector dimension is fixed by the database migration (`vector(1024)` for `bge-m3`). To use another model:
+
+1. Set `EMBEDDING_MODEL` and `EMBEDDING_DIMENSION`, and change the model in the `ollama-pull` service in `docker-compose.yml`.
+2. Add an Alembic migration that changes the `chunks.embedding` column (and its HNSW index) to the new dimension.
+3. Upload the documents again. Vectors from different models cannot be compared, and there is no re-index tool.
+
+### Known limits
+
+- **Scanned PDFs** (images with no text layer) are rejected with "No text could be extracted"; there is no OCR. DOCX is not supported.
+- **Private addresses.** A URL whose host resolves to a private, loopback or link-local address is refused, at every redirect. DNS rebinding (a host that resolves differently between the check and the fetch) is not defended against; acceptable for a local, single-user app.
+- **Long documents on CPU.** RabbitMQ's default consumer timeout is 30 minutes: a document that takes longer to embed is redelivered and counts another attempt.
 
 ## Why not Celery
 
@@ -104,7 +136,7 @@ docker compose up -d postgres rabbitmq
 cd backend && uv run pytest -m integration
 ```
 
-CI runs all of the above on every push and pull request to `main`. A second job then builds the image, starts the whole stack with Compose and runs `scripts/smoke.sh`, which uploads a file and waits for it to become `ready`. You can run the same check against your local stack:
+CI runs all of the above on every push and pull request to `main`. A second job then builds the image, starts the whole stack with Compose and runs `scripts/smoke.sh`, which uploads a file, waits for it to become `ready` with real Ollama embeddings (the job pulls `bge-m3`), and checks that its chunks are stored. You can run the same check against your local stack:
 
 ```bash
 scripts/smoke.sh   # or: scripts/smoke.sh http://host:8000
