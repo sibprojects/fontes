@@ -11,8 +11,14 @@ from fontes.application.documents import (
     EmptyFileError,
     FileTooLargeError,
 )
+from fontes.domain.chunks import Chunk
 from fontes.domain.documents import Document, DocumentStatus, UnsupportedSourceError
-from tests.fakes import FakePublisher, InMemoryDocumentRepository, InMemoryFileStorage
+from tests.fakes import (
+    FakePublisher,
+    InMemoryChunkRepository,
+    InMemoryDocumentRepository,
+    InMemoryFileStorage,
+)
 
 T0 = datetime(2026, 11, 5, 12, 0, tzinfo=UTC)
 T1 = T0 + timedelta(minutes=1)
@@ -34,10 +40,18 @@ def publisher() -> FakePublisher:
 
 
 @pytest.fixture
+def chunks(repo: InMemoryDocumentRepository) -> InMemoryChunkRepository:
+    return InMemoryChunkRepository(repo)
+
+
+@pytest.fixture
 def svc(
-    repo: InMemoryDocumentRepository, storage: InMemoryFileStorage, publisher: FakePublisher
+    repo: InMemoryDocumentRepository,
+    storage: InMemoryFileStorage,
+    chunks: InMemoryChunkRepository,
+    publisher: FakePublisher,
 ) -> DocumentService:
-    return DocumentService(repo, storage, publisher, max_upload_bytes=100, clock=lambda: T0)
+    return DocumentService(repo, storage, chunks, publisher, max_upload_bytes=100, clock=lambda: T0)
 
 
 async def test_upload_stores_file_and_queues_document(
@@ -86,7 +100,14 @@ async def test_upload_removes_file_when_row_insert_fails(
         raise RuntimeError("db down")
 
     repo.add = broken_add  # type: ignore[method-assign]
-    svc = DocumentService(repo, storage, FakePublisher(), max_upload_bytes=100, clock=lambda: T0)
+    svc = DocumentService(
+        repo,
+        storage,
+        InMemoryChunkRepository(repo),
+        FakePublisher(),
+        max_upload_bytes=100,
+        clock=lambda: T0,
+    )
     with pytest.raises(RuntimeError, match="db down"):
         await svc.upload("a.pdf", b"x")
     assert storage.files == {}
@@ -103,7 +124,12 @@ async def test_list_newest_first(
 ) -> None:
     times = iter([T0, T1])
     svc = DocumentService(
-        repo, storage, FakePublisher(), max_upload_bytes=100, clock=lambda: next(times)
+        repo,
+        storage,
+        InMemoryChunkRepository(repo),
+        FakePublisher(),
+        max_upload_bytes=100,
+        clock=lambda: next(times),
     )
     first = await svc.upload("a.pdf", b"1")
     second = await svc.add_url("https://e.com/x")
@@ -196,7 +222,9 @@ async def test_add_url_publishes(svc: DocumentService, publisher: FakePublisher)
 async def test_upload_succeeds_when_publish_fails(
     repo: InMemoryDocumentRepository, storage: InMemoryFileStorage
 ) -> None:
-    svc = DocumentService(repo, storage, FakePublisher(fail=True), max_upload_bytes=100)
+    svc = DocumentService(
+        repo, storage, InMemoryChunkRepository(repo), FakePublisher(fail=True), max_upload_bytes=100
+    )
     r = await svc.upload("a.pdf", b"x")
     assert r.created
     stored = await repo.get(r.document.id)
@@ -214,9 +242,25 @@ async def test_upload_does_not_hang_when_publish_never_confirms(
     repo: InMemoryDocumentRepository, storage: InMemoryFileStorage
 ) -> None:
     svc = DocumentService(
-        repo, storage, HangingPublisher(), max_upload_bytes=100, publish_timeout=0.05
+        repo,
+        storage,
+        InMemoryChunkRepository(repo),
+        HangingPublisher(),
+        max_upload_bytes=100,
+        publish_timeout=0.05,
     )
     r = await asyncio.wait_for(svc.upload("a.pdf", b"x"), timeout=2)
     assert r.created
     stored = await repo.get(r.document.id)
     assert stored is not None and stored.status == DocumentStatus.QUEUED
+
+
+async def test_list_chunks_in_order(svc: DocumentService, chunks: InMemoryChunkRepository) -> None:
+    doc = (await svc.add_url("https://e.com/x")).document
+    await chunks.replace(doc.id, [Chunk(1, "b"), Chunk(0, "a")], [[0.0], [0.0]])
+    assert [c.text for c in await svc.list_chunks(doc.id)] == ["a", "b"]
+
+
+async def test_list_chunks_unknown_raises(svc: DocumentService) -> None:
+    with pytest.raises(DocumentNotFoundError):
+        await svc.list_chunks(uuid4())

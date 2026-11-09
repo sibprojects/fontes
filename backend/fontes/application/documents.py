@@ -1,4 +1,5 @@
 import asyncio
+import builtins
 import hashlib
 import logging
 from collections.abc import Callable
@@ -6,12 +7,14 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from uuid import UUID
 
+from fontes.application.ports.chunks import ChunkRepository
 from fontes.application.ports.documents import (
     DocumentRepository,
     DuplicateDocumentError,
     FileStorage,
 )
 from fontes.application.ports.ingestion import MessagePublisher
+from fontes.domain.chunks import Chunk
 from fontes.domain.documents import Document, DocumentError, normalize_url
 
 log = logging.getLogger(__name__)
@@ -44,6 +47,7 @@ class DocumentService:
         self,
         repo: DocumentRepository,
         storage: FileStorage,
+        chunks: ChunkRepository,
         publisher: MessagePublisher,
         max_upload_bytes: int,
         clock: Callable[[], datetime] = _utc_now,
@@ -51,6 +55,7 @@ class DocumentService:
     ) -> None:
         self._repo = repo
         self._storage = storage
+        self._chunks = chunks
         self._publisher = publisher
         self._max_upload_bytes = max_upload_bytes
         self._clock = clock
@@ -105,6 +110,11 @@ class DocumentService:
 
     async def list(self) -> list[Document]:
         return await self._repo.list()
+
+    async def list_chunks(self, id: UUID) -> builtins.list[Chunk]:
+        if await self._repo.get(id) is None:
+            raise DocumentNotFoundError(f"Document {id} not found")
+        return await self._chunks.list_for_document(id)
 
     async def delete(self, id: UUID) -> None:
         doc = await self._repo.get(id)

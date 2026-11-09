@@ -1,5 +1,5 @@
 from collections.abc import AsyncIterator
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -7,7 +7,13 @@ from httpx import ASGITransport, AsyncClient
 from fontes.api.app import create_app
 from fontes.api.limits import MULTIPART_OVERHEAD_BYTES
 from fontes.application.documents import DocumentService
-from tests.fakes import FakePublisher, InMemoryDocumentRepository, InMemoryFileStorage
+from fontes.domain.chunks import Chunk
+from tests.fakes import (
+    FakePublisher,
+    InMemoryChunkRepository,
+    InMemoryDocumentRepository,
+    InMemoryFileStorage,
+)
 
 LIMIT = 100
 
@@ -18,10 +24,22 @@ def storage() -> InMemoryFileStorage:
 
 
 @pytest.fixture
-async def c(storage: InMemoryFileStorage) -> AsyncIterator[AsyncClient]:
-    service = DocumentService(
-        InMemoryDocumentRepository(), storage, FakePublisher(), max_upload_bytes=LIMIT
-    )
+def repo() -> InMemoryDocumentRepository:
+    return InMemoryDocumentRepository()
+
+
+@pytest.fixture
+def chunks(repo: InMemoryDocumentRepository) -> InMemoryChunkRepository:
+    return InMemoryChunkRepository(repo)
+
+
+@pytest.fixture
+async def c(
+    repo: InMemoryDocumentRepository,
+    storage: InMemoryFileStorage,
+    chunks: InMemoryChunkRepository,
+) -> AsyncIterator[AsyncClient]:
+    service = DocumentService(repo, storage, chunks, FakePublisher(), max_upload_bytes=LIMIT)
     app = create_app([], health_timeout=1.0, documents=service, max_upload_bytes=LIMIT)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
@@ -154,3 +172,34 @@ async def test_oversized_chunked_body_is_rejected(
     )
     assert r.status_code == 413
     assert storage.files == {}
+
+
+async def test_list_chunks_returns_locations(
+    c: AsyncClient, chunks: InMemoryChunkRepository
+) -> None:
+    doc_id = (await c.post("/documents", files=pdf(b"# A", name="a.md"))).json()["id"]
+    stored = [
+        Chunk(0, "alpha", section="A"),
+        Chunk(1, "beta", page_start=2, page_end=3),
+        Chunk(2, "gamma"),
+    ]
+    await chunks.replace(UUID(doc_id), stored, [[0.0]] * 3)
+    r = await c.get(f"/documents/{doc_id}/chunks")
+    assert r.status_code == 200
+    assert r.json() == [
+        {"ordinal": 0, "location": "A", "text": "alpha"},
+        {"ordinal": 1, "location": "pp. 2\u20133", "text": "beta"},
+        {"ordinal": 2, "location": "part 3 of 3", "text": "gamma"},
+    ]
+
+
+async def test_list_chunks_of_unprocessed_document_is_empty(c: AsyncClient) -> None:
+    doc_id = (await c.post("/documents", files=pdf())).json()["id"]
+    r = await c.get(f"/documents/{doc_id}/chunks")
+    assert (r.status_code, r.json()) == (200, [])
+
+
+async def test_list_chunks_unknown_document_404(c: AsyncClient) -> None:
+    r = await c.get(f"/documents/{uuid4()}/chunks")
+    assert r.status_code == 404
+    assert isinstance(r.json()["detail"], str)

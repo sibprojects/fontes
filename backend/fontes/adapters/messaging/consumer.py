@@ -60,9 +60,11 @@ class IngestConsumer:
     async def _on_message(self, message: AbstractIncomingMessage) -> None:
         try:
             document_id = decode_document_id(message.body)
-        except ValueError as exc:
-            log.warning("Poison message sent to %s: %s", self._topology.dlq, exc)
-            await self._forward(message, self._topology.dlq, str(exc))
+        except Exception as exc:
+            # Anything, not just ValueError: a deeply nested body raises RecursionError, and
+            # an unacked message would stall the worker (prefetch 1).
+            log.warning("Poison message sent to %s: %r", self._topology.dlq, exc)
+            await self._forward(message, self._topology.dlq, f"{type(exc).__name__}: {exc}")
             return
 
         try:

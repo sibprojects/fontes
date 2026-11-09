@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Request, Response, UploadFile, status
 
-from fontes.api.schemas import DocumentOut, UrlIn
+from fontes.api.schemas import ChunkOut, DocumentOut, UrlIn
 from fontes.application.documents import AddResult, DocumentService, FileTooLargeError
 
 router = APIRouter(prefix="/documents", tags=["documents"])
@@ -45,6 +45,12 @@ async def add_url(body: UrlIn, request: Request, response: Response) -> Document
 @router.get("")
 async def list_documents(request: Request) -> list[DocumentOut]:
     return [DocumentOut.from_domain(d) for d in await _service(request).list()]
+
+
+@router.get("/{document_id}/chunks")
+async def list_chunks(document_id: UUID, request: Request) -> list[ChunkOut]:
+    chunks = await _service(request).list_chunks(document_id)
+    return [ChunkOut.from_domain(c, len(chunks)) for c in chunks]
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

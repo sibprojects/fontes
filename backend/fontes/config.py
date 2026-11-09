@@ -16,7 +16,6 @@ class Settings(BaseSettings):
     ingest_max_attempts: int = 3
     ingest_retry_delay_ms: int = 5000
     worker_prefetch: int = 1
-    stub_processing_seconds: float = 1.0
     publish_timeout_seconds: float = 3.0
     # Fixed by migration 0002; a different model dimension needs a new migration.
     embedding_dimension: int = 1024
@@ -25,6 +24,9 @@ class Settings(BaseSettings):
     embed_batch_size: int = 16
     ollama_timeout_seconds: float = 120.0
     url_fetch_timeout_seconds: float = 20.0
+    chunk_max_chars: int = 1500
+    chunk_overlap_chars: int = 200
+    chunk_min_chars: int = 300
 
 
 @lru_cache

@@ -172,6 +172,28 @@ async def test_poison_message_goes_to_dlq(amqp: tuple[AmqpConnection, Topology])
     assert handler.calls == []
 
 
+async def test_deeply_nested_body_goes_to_dlq(amqp: tuple[AmqpConnection, Topology]) -> None:
+    connection, topology = amqp
+    handler = ScriptedHandler(ACK)
+    consumer = _consumer(connection, topology, handler)
+    await consumer.start()
+    try:
+        channel = await (await connection.get()).channel()
+        await channel.default_exchange.publish(
+            aio_pika.Message(b"[" * 100_000), routing_key=topology.main
+        )
+        message = await _get(connection, topology.dlq)
+        # The worker is not stalled: the next valid message is still consumed.
+        document_id = uuid4()
+        await AmqpPublisher(connection, topology).publish_ingest(document_id)
+        await eventually(lambda: len(handler.calls) == 1)
+    finally:
+        await consumer.stop()
+    assert message.body == b"[" * 100_000
+    assert "RecursionError" in message.headers["x-fontes-error"]
+    assert handler.calls[0][0] == document_id
+
+
 async def test_handler_crash_is_retried_then_dead_lettered(
     amqp: tuple[AmqpConnection, Topology],
 ) -> None:
