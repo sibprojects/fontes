@@ -68,12 +68,16 @@ async def test_wrong_vector_count_raises() -> None:
         await _embedder(httpx.MockTransport(handle)).embed(["a", "b"])
 
 
-async def test_connection_error_is_not_permanent() -> None:
+async def test_connection_error_is_transient_and_names_ollama() -> None:
     def handle(request: httpx.Request) -> httpx.Response:
-        raise httpx.ConnectError("refused", request=request)
+        raise httpx.ConnectError("All connection attempts failed", request=request)
 
-    with pytest.raises(httpx.ConnectError):
+    with pytest.raises(
+        ConnectionError, match=r"Cannot reach Ollama at http://ollama\.test"
+    ) as info:
         await _embedder(httpx.MockTransport(handle)).embed(["a"])
+    assert not isinstance(info.value, PermanentIngestionError)
+    assert isinstance(info.value.__cause__, httpx.ConnectError)
 
 
 async def test_server_error_is_not_permanent() -> None:
@@ -83,3 +87,11 @@ async def test_server_error_is_not_permanent() -> None:
     with pytest.raises(Exception) as info:
         await _embedder(httpx.MockTransport(handle)).embed(["a"])
     assert not isinstance(info.value, PermanentIngestionError)
+
+
+async def test_timeout_is_transient_and_names_ollama() -> None:
+    def handle(request: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("timed out", request=request)
+
+    with pytest.raises(TimeoutError, match="Ollama at http://ollama.test"):
+        await _embedder(httpx.MockTransport(handle)).embed(["a"])

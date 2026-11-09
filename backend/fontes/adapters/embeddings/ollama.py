@@ -31,9 +31,17 @@ class OllamaEmbedder:
         await self._client.aclose()
 
     async def _embed_batch(self, texts: Sequence[str]) -> list[list[float]]:
-        response = await self._client.post(
-            "/api/embed", json={"model": self._model, "input": list(texts)}
-        )
+        try:
+            response = await self._client.post(
+                "/api/embed", json={"model": self._model, "input": list(texts)}
+            )
+        except httpx.TimeoutException as exc:
+            raise TimeoutError(
+                f"Ollama at {self._client.base_url} did not answer in time ({exc!r})"
+            ) from exc
+        except httpx.TransportError as exc:
+            # The stored error should say which service is down, not just "connection failed".
+            raise ConnectionError(f"Cannot reach Ollama at {self._client.base_url}: {exc}") from exc
         if response.status_code == 404 and "not found" in _error(response):
             raise RuntimeError(
                 f"Embedding model {self._model!r} is not available in Ollama; "
