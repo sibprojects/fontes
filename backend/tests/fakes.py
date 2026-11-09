@@ -5,7 +5,7 @@ from dataclasses import replace
 from uuid import UUID
 
 from fontes.application.ports.documents import DuplicateDocumentError
-from fontes.domain.chunks import Chunk
+from fontes.domain.chunks import Chunk, Segment
 from fontes.domain.documents import Document, DocumentStatus
 
 
@@ -149,3 +149,17 @@ class FakeEmbedder:
     def _vector(self, text: str) -> list[float]:
         digest = hashlib.sha256(text.encode()).digest()
         return [digest[i % len(digest)] / 255 for i in range(self.dimension)]
+
+
+class FakeLoader:
+    """Returns the given segments, or raises the given exception."""
+
+    def __init__(self, segments: builtins.list[Segment] | Exception) -> None:
+        self.segments = segments
+        self.calls = 0
+
+    async def load(self, doc: Document) -> builtins.list[Segment]:
+        self.calls += 1
+        if isinstance(self.segments, Exception):
+            raise self.segments
+        return list(self.segments)
