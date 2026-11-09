@@ -5,8 +5,10 @@ services:
       POSTGRES_USER: fontes
       POSTGRES_PASSWORD: fontes
       POSTGRES_DB: fontes
+    # Host ports sit above 15000: Windows reserves random ranges below that (its dynamic
+    # port range) after a reboot, which made 5432 and 5672 unbindable.
     ports:
-      - "5432:5432"
+      - "25432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -23,7 +25,7 @@ services:
       RABBITMQ_DEFAULT_USER: fontes
       RABBITMQ_DEFAULT_PASS: fontes
     ports:
-      - "5672:5672"
+      - "25672:5672"
       - "15672:15672"
     volumes:
       - rabbitmq:/var/lib/rabbitmq

@@ -21,7 +21,7 @@ jobs:
           POSTGRES_PASSWORD: fontes
           POSTGRES_DB: fontes
         ports:
-          - 5432:5432
+          - 25432:5432
         options: >-
           --health-cmd "pg_isready -U fontes"
           --health-interval 5s
@@ -33,7 +33,7 @@ jobs:
           RABBITMQ_DEFAULT_USER: fontes
           RABBITMQ_DEFAULT_PASS: fontes
         ports:
-          - 5672:5672
+          - 25672:5672
         options: >-
           --health-cmd "rabbitmq-diagnostics -q ping"
           --health-interval 10s
