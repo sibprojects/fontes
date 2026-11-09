@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     embedding_model: str = "bge-m3"
     embed_batch_size: int = 16
     ollama_timeout_seconds: float = 120.0
+    url_fetch_timeout_seconds: float = 20.0
 
 
 @lru_cache
