@@ -12,6 +12,7 @@ dependencies = [
     "httpx>=0.28.1",
     "pgvector>=0.5.1",
     "pydantic-settings",
+    "pypdf>=7.0.0",
     "python-multipart>=0.0.33",
     "sqlalchemy[asyncio]",
     "uvicorn[standard]",
