@@ -7,6 +7,7 @@ from uuid import UUID
 
 from fontes.application.ports.chunks import SearchHit
 from fontes.application.ports.documents import DuplicateDocumentError
+from fontes.domain.answers import Answer
 from fontes.domain.chunks import Chunk, Segment
 from fontes.domain.documents import Document, DocumentStatus
 
@@ -98,6 +99,21 @@ class InMemoryChunkRepository:
 def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
     dot = sum(x * y for x, y in zip(a, b, strict=True))
     return dot / (math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b)))
+
+
+class InMemoryQuestionRepository:
+    def __init__(self) -> None:
+        self.rows: dict[UUID, Answer] = {}
+
+    async def add(self, answer: Answer) -> None:
+        self.rows[answer.id] = answer
+
+    async def get(self, id: UUID) -> Answer | None:
+        return self.rows.get(id)
+
+    async def list(self, limit: int) -> builtins.list[Answer]:
+        newest = sorted(self.rows.values(), key=lambda a: a.created_at, reverse=True)
+        return newest[:limit]
 
 
 class InMemoryFileStorage:

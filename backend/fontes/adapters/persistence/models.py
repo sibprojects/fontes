@@ -1,8 +1,10 @@
 from datetime import datetime
+from typing import Any
 from uuid import UUID
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import DateTime, ForeignKey, Index, Integer, Text, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 # Must match Settings.embedding_dimension and migration 0002 (a test pins the latter).
@@ -60,3 +62,20 @@ class ChunkRow(Base):
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
     )
+
+
+class QuestionRow(Base):
+    __tablename__ = "questions"
+
+    id: Mapped[UUID] = mapped_column(primary_key=True)
+    question: Mapped[str] = mapped_column(Text)
+    answer: Mapped[str] = mapped_column(Text)
+    label: Mapped[str] = mapped_column(Text)
+    paragraphs: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    citations: Mapped[list[dict[str, Any]]] = mapped_column(JSONB)
+    provider: Mapped[str | None] = mapped_column(Text)
+    model: Mapped[str | None] = mapped_column(Text)
+    duration_ms: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (Index("ix_questions_created_at", "created_at"),)

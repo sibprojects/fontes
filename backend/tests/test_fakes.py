@@ -14,7 +14,17 @@ from tests.chunk_repository_contract import (  # noqa: F401
     test_search_skips_documents_not_ready,
     test_text_with_unusual_characters_round_trips,
 )
-from tests.fakes import InMemoryChunkRepository, InMemoryDocumentRepository
+from tests.fakes import (
+    InMemoryChunkRepository,
+    InMemoryDocumentRepository,
+    InMemoryQuestionRepository,
+)
+from tests.question_repository_contract import (  # noqa: F401
+    test_add_then_get_round_trips,
+    test_get_unknown_is_none,
+    test_list_newest_first_with_limit,
+    test_not_found_answer_round_trips,
+)
 from tests.repository_contract import (  # noqa: F401
     test_list_by_status_oldest_first,
     test_set_status_clears_error,
@@ -40,3 +50,8 @@ def docs() -> InMemoryDocumentRepository:
 @pytest.fixture
 def chunks(docs: InMemoryDocumentRepository) -> InMemoryChunkRepository:
     return InMemoryChunkRepository(docs)
+
+
+@pytest.fixture
+def questions() -> InMemoryQuestionRepository:
+    return InMemoryQuestionRepository()

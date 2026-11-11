@@ -29,7 +29,7 @@ def migrated() -> None:
 async def repo(migrated: None) -> AsyncIterator[SqlDocumentRepository]:
     engine = create_async_engine(Settings().database_url)
     async with engine.begin() as conn:
-        await conn.execute(text("TRUNCATE documents CASCADE"))
+        await conn.execute(text("TRUNCATE documents, questions CASCADE"))
     yield SqlDocumentRepository(async_sessionmaker(engine, expire_on_commit=False))
     await engine.dispose()
 
