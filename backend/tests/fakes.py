@@ -1,9 +1,11 @@
 import builtins
 import hashlib
+import math
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
 from uuid import UUID
 
+from fontes.application.ports.chunks import SearchHit
 from fontes.application.ports.documents import DuplicateDocumentError
 from fontes.domain.chunks import Chunk, Segment
 from fontes.domain.documents import Document, DocumentStatus
@@ -82,6 +84,20 @@ class InMemoryChunkRepository:
         if document_id not in self._documents.rows:  # mirrors the cascade delete
             return []
         return sorted(self.rows.get(document_id, []), key=lambda c: c.ordinal)
+
+    async def search(self, vector: Sequence[float], limit: int) -> builtins.list[SearchHit]:
+        hits = [
+            SearchHit(doc.id, doc.title, doc.url, chunk, len(chunks), _cosine(vector, embedding))
+            for doc_id, chunks in self.rows.items()
+            if (doc := self._documents.rows.get(doc_id)) and doc.status == DocumentStatus.READY
+            for chunk, embedding in zip(chunks, self.embeddings[doc_id], strict=True)
+        ]
+        return sorted(hits, key=lambda h: h.score, reverse=True)[:limit]
+
+
+def _cosine(a: Sequence[float], b: Sequence[float]) -> float:
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
+    return dot / (math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b)))
 
 
 class InMemoryFileStorage:

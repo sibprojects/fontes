@@ -12,7 +12,7 @@ import pytest
 from fontes.application.ports.chunks import ChunkRepository
 from fontes.application.ports.documents import DocumentRepository
 from fontes.domain.chunks import Chunk
-from fontes.domain.documents import Document
+from fontes.domain.documents import Document, DocumentStatus
 
 T0 = datetime(2026, 11, 8, 12, 0, tzinfo=UTC)
 
@@ -73,3 +73,74 @@ async def test_text_with_unusual_characters_round_trips(
     text = "Глава 1 — «цитата» ✓ \t tab"
     await chunks.replace(doc_id, [Chunk(0, text, section="Раздел")], _vectors(1))
     assert await chunks.list_for_document(doc_id) == [Chunk(0, text, section="Раздел")]
+
+
+def _axis(*weights: tuple[int, float]) -> list[float]:
+    vector = [0.0] * 1024
+    for index, weight in weights:
+        vector[index] = weight
+    return vector
+
+
+async def _ready(docs: DocumentRepository, doc: Document | None = None) -> Document:
+    doc = doc or Document.from_upload("a.pdf", f"hash-{uuid4()}", now=T0)
+    await docs.add(doc)
+    await docs.set_status(doc.id, DocumentStatus.READY)
+    return doc
+
+
+async def test_search_orders_by_similarity(
+    chunks: ChunkRepository, docs: DocumentRepository
+) -> None:
+    doc = await _ready(docs)
+    await chunks.replace(
+        doc.id,
+        [Chunk(0, "axis0"), Chunk(1, "axis1"), Chunk(2, "mixed")],
+        [_axis((0, 1.0)), _axis((1, 1.0)), _axis((0, 0.7), (1, 0.7))],
+    )
+    hits = await chunks.search(_axis((0, 1.0)), limit=2)
+    assert [h.chunk.text for h in hits] == ["axis0", "mixed"]
+    assert [h.score for h in hits] == pytest.approx([1.0, 0.7071], abs=1e-3)
+
+
+async def test_search_skips_documents_not_ready(
+    chunks: ChunkRepository, docs: DocumentRepository
+) -> None:
+    doc = await _document(docs)  # stays queued
+    await chunks.replace(doc, [Chunk(0, "match")], [_axis((0, 1.0))])
+    assert await chunks.search(_axis((0, 1.0)), limit=5) == []
+
+
+async def test_search_respects_limit(chunks: ChunkRepository, docs: DocumentRepository) -> None:
+    doc = await _ready(docs)
+    await chunks.replace(
+        doc.id,
+        [Chunk(i, f"c{i}") for i in range(5)],
+        [_axis((i, 1.0), (10, 0.5)) for i in range(5)],
+    )
+    assert len(await chunks.search(_axis((10, 1.0)), limit=3)) == 3
+
+
+async def test_search_hit_carries_citation_fields(
+    chunks: ChunkRepository, docs: DocumentRepository
+) -> None:
+    doc = await _ready(docs, Document.from_url(f"https://x.test/{uuid4()}", now=T0))
+    stored = [Chunk(0, "a", section="Intro"), Chunk(1, "b"), Chunk(2, "c")]
+    await chunks.replace(doc.id, stored, [_axis((0, 1.0)), _axis((1, 1.0)), _axis((2, 1.0))])
+    (hit,) = await chunks.search(_axis((0, 1.0)), limit=1)
+    assert hit.document_id == doc.id
+    assert hit.document_title == doc.title
+    assert hit.document_url == doc.url
+    assert hit.total_chunks == 3
+    assert hit.chunk == stored[0]
+
+
+async def test_search_across_documents(chunks: ChunkRepository, docs: DocumentRepository) -> None:
+    first, second = await _ready(docs), await _ready(docs)
+    await chunks.replace(first.id, [Chunk(0, "first")], [_axis((0, 0.6), (1, 0.8))])
+    await chunks.replace(second.id, [Chunk(0, "second")], [_axis((0, 1.0))])
+    hits = await chunks.search(_axis((0, 1.0)), limit=5)
+    assert [(h.document_id, h.chunk.text) for h in hits] == [
+        (second.id, "second"),
+        (first.id, "first"),
+    ]

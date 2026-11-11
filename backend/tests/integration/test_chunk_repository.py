@@ -17,6 +17,11 @@ from tests.chunk_repository_contract import (  # noqa: F401
     test_replace_then_list_in_order,
     test_replace_twice_leaves_only_second,
     test_replace_with_mismatched_embeddings_raises,
+    test_search_across_documents,
+    test_search_hit_carries_citation_fields,
+    test_search_orders_by_similarity,
+    test_search_respects_limit,
+    test_search_skips_documents_not_ready,
     test_text_with_unusual_characters_round_trips,
 )
 from tests.integration.conftest import BACKEND

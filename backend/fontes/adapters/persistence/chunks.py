@@ -2,12 +2,14 @@ import builtins
 from collections.abc import Sequence
 from uuid import UUID, uuid4
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, exists, func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from sqlalchemy.orm import defer
 
 from fontes.adapters.persistence.models import ChunkRow, DocumentRow
+from fontes.application.ports.chunks import SearchHit
 from fontes.domain.chunks import Chunk
+from fontes.domain.documents import DocumentStatus
 
 
 def _to_domain(row: ChunkRow) -> Chunk:
@@ -65,3 +67,53 @@ class SqlChunkRepository:
                 .order_by(ChunkRow.ordinal)
             )
             return [_to_domain(r) for r in rows]
+
+    async def search(self, vector: Sequence[float], limit: int) -> builtins.list[SearchHit]:
+        distance = ChunkRow.embedding.cosine_distance(list(vector))
+        # Order and limit first, so the HNSW index serves the ordering; count only the top rows.
+        top = (
+            select(
+                ChunkRow.document_id,
+                ChunkRow.ordinal,
+                ChunkRow.text,
+                ChunkRow.page_start,
+                ChunkRow.page_end,
+                ChunkRow.section,
+                distance.label("distance"),
+            )
+            # EXISTS, not a join: a join makes Postgres sort every chunk instead of walking
+            # the HNSW index in distance order.
+            .where(
+                exists().where(
+                    DocumentRow.id == ChunkRow.document_id,
+                    DocumentRow.status == DocumentStatus.READY.value,
+                )
+            )
+            .order_by(distance)
+            .limit(limit)
+            .subquery()
+        )
+        total = (
+            select(func.count()).where(ChunkRow.document_id == top.c.document_id).scalar_subquery()
+        )
+        query = (
+            select(top, DocumentRow.title, DocumentRow.url, total.label("total"))
+            .join(DocumentRow, DocumentRow.id == top.c.document_id)
+            .order_by(top.c.distance)
+        )
+        async with self._sessions.begin() as session:
+            # The index yields candidates before the filter; without an iterative scan,
+            # chunks of documents that are not ready could leave fewer than `limit` hits.
+            await session.execute(text("SET LOCAL hnsw.iterative_scan = strict_order"))
+            rows = (await session.execute(query)).all()
+        return [
+            SearchHit(
+                document_id=row.document_id,
+                document_title=row.title,
+                document_url=row.url,
+                chunk=Chunk(row.ordinal, row.text, row.page_start, row.page_end, row.section),
+                total_chunks=row.total,
+                score=1.0 - float(row.distance),
+            )
+            for row in rows
+        ]
