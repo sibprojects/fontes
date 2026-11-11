@@ -111,10 +111,10 @@ class Chunker:
         if paragraph > self._max // 2:
             return start + paragraph
         sentence = max(window.rfind(end) for end in _SENTENCE_ENDS)
-        if sentence > 0:
+        if sentence > self._max // 2:
             return start + sentence + 1
         space = max(window.rfind(" "), window.rfind("\n"), window.rfind("\t"))
-        if space > 0:
+        if space > self._max // 2:
             return start + space
         return start + self._max
 

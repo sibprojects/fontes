@@ -2,9 +2,10 @@ import importlib.util
 from collections.abc import AsyncIterator
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
+from fontes.adapters.persistence import models
 from fontes.adapters.persistence.chunks import SqlChunkRepository
 from fontes.adapters.persistence.documents import SqlDocumentRepository
 from fontes.config import Settings
@@ -74,3 +75,33 @@ def test_migration_dimension_matches_settings() -> None:
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert Settings().embedding_dimension == module.EMBEDDING_DIMENSION
+
+
+async def test_list_for_document_does_not_select_embedding(
+    engine: AsyncEngine, docs: SqlDocumentRepository, chunks: SqlChunkRepository
+) -> None:
+    doc = Document.from_upload("a.pdf", "hash-a", now=T0)
+    await docs.add(doc)
+    await chunks.replace(doc.id, [Chunk(0, "a")], [[0.1] * 1024])
+    statements: list[str] = []
+
+    def record(_conn: object, _cursor: object, statement: str, *_args: object) -> None:
+        statements.append(statement)
+
+    event.listen(engine.sync_engine, "before_cursor_execute", record)
+    try:
+        assert await chunks.list_for_document(doc.id) == [Chunk(0, "a")]
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", record)
+    selects = [s for s in statements if s.lstrip().upper().startswith("SELECT")]
+    assert selects
+    assert not any("chunks.embedding" in s for s in selects)
+
+
+def test_model_dimension_matches_migration() -> None:
+    path = BACKEND / "alembic" / "versions" / "0002_chunks.py"
+    spec = importlib.util.spec_from_file_location("migration_0002", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert models.EMBEDDING_DIMENSION == module.EMBEDDING_DIMENSION

@@ -134,3 +134,14 @@ def test_section_title_is_capped() -> None:
 def test_blank_section_title_becomes_none() -> None:
     chunks = _chunker().split([Segment("body", section=" \x00 ")])
     assert chunks[0].section is None
+
+
+def test_no_tiny_chunk_after_early_sentence_end() -> None:
+    chunks = Chunker(1500, 200, 300).split([Segment("Intro. " + "word " * 600)])
+    assert len(chunks) > 1
+    assert all(len(c.text) > 750 for c in chunks[:-1])
+
+
+def test_space_cut_must_be_past_half_window() -> None:
+    chunks = Chunker(100, 10, 50).split([Segment("ab " + "x" * 300)])
+    assert len(chunks[0].text) == 100

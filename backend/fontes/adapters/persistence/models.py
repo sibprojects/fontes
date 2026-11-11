@@ -53,4 +53,10 @@ class ChunkRow(Base):
 
     __table_args__ = (
         UniqueConstraint("document_id", "ordinal", name="uq_chunks_document_ordinal"),
+        Index(
+            "ix_chunks_embedding",
+            "embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"embedding": "vector_cosine_ops"},
+        ),
     )

@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm import defer
 
 from fontes.adapters.persistence.models import ChunkRow, DocumentRow
 from fontes.domain.chunks import Chunk
@@ -59,6 +60,7 @@ class SqlChunkRepository:
         async with self._sessions() as session:
             rows = await session.scalars(
                 select(ChunkRow)
+                .options(defer(ChunkRow.embedding))
                 .where(ChunkRow.document_id == document_id)
                 .order_by(ChunkRow.ordinal)
             )
