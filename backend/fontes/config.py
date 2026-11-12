@@ -28,6 +28,15 @@ class Settings(BaseSettings):
     chunk_max_chars: int = 1500
     chunk_overlap_chars: int = 200
     chunk_min_chars: int = 300
+    chat_model: str = "qwen2.5:7b"
+    llm_timeout_seconds: float = 300.0
+    # Always sent: Ollama's default context window would silently cut the sources off.
+    llm_num_ctx: int = 8192
+    llm_temperature: float = 0.1
+    ask_top_k: int = 6
+    # Cosine similarity; chunks below it are not relevant enough to answer from.
+    ask_min_score: float = 0.45
+    question_max_chars: int = 2000
 
 
 @lru_cache
