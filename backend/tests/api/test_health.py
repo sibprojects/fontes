@@ -12,6 +12,7 @@ from tests.fakes import (
     InMemoryChunkRepository,
     InMemoryDocumentRepository,
     InMemoryFileStorage,
+    fake_ask_service,
 )
 
 
@@ -45,7 +46,14 @@ def health_app(checks: list[HealthCheck], health_timeout: float) -> FastAPI:
     service = DocumentService(
         repo, InMemoryFileStorage(), InMemoryChunkRepository(repo), FakePublisher(), 100
     )
-    return create_app(checks, health_timeout, documents=service, max_upload_bytes=100)
+    return create_app(
+        checks,
+        health_timeout,
+        documents=service,
+        max_upload_bytes=100,
+        ask=fake_ask_service(repo),
+        question_max_chars=2000,
+    )
 
 
 def client(app: FastAPI) -> AsyncClient:

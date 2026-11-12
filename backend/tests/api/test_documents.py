@@ -13,6 +13,7 @@ from tests.fakes import (
     InMemoryChunkRepository,
     InMemoryDocumentRepository,
     InMemoryFileStorage,
+    fake_ask_service,
 )
 
 LIMIT = 100
@@ -40,7 +41,14 @@ async def c(
     chunks: InMemoryChunkRepository,
 ) -> AsyncIterator[AsyncClient]:
     service = DocumentService(repo, storage, chunks, FakePublisher(), max_upload_bytes=LIMIT)
-    app = create_app([], health_timeout=1.0, documents=service, max_upload_bytes=LIMIT)
+    app = create_app(
+        [],
+        health_timeout=1.0,
+        documents=service,
+        max_upload_bytes=LIMIT,
+        ask=fake_ask_service(repo),
+        question_max_chars=2000,
+    )
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         yield client
 

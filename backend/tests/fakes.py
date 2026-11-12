@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import replace
 from uuid import UUID
 
+from fontes.application.asking import AskService
 from fontes.application.ports.chunks import SearchHit
 from fontes.application.ports.documents import DuplicateDocumentError
 from fontes.domain.answers import Answer
@@ -221,3 +222,11 @@ class FakeLLM:
             yield piece
         if self.fail is not None:
             raise self.fail
+
+
+def fake_ask_service(documents: InMemoryDocumentRepository | None = None) -> AskService:
+    """An AskService over fakes, for app tests that never ask anything."""
+    chunks = InMemoryChunkRepository(documents or InMemoryDocumentRepository())
+    return AskService(
+        FakeEmbedder(), chunks, FakeLLM(), InMemoryQuestionRepository(), top_k=6, min_score=0.0
+    )

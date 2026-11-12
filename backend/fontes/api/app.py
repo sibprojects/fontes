@@ -5,8 +5,10 @@ from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
 from fontes.api import health
+from fontes.api.ask import router as ask_router
 from fontes.api.documents import router as documents_router
 from fontes.api.limits import MULTIPART_OVERHEAD_BYTES, BodySizeLimit
+from fontes.application.asking import AskService, QuestionNotFoundError
 from fontes.application.documents import (
     DocumentNotFoundError,
     DocumentService,
@@ -21,6 +23,7 @@ Lifespan = Callable[[FastAPI], AbstractAsyncContextManager[None]]
 # Most specific first: the first matching class decides the status code.
 _ERROR_STATUS: list[tuple[type[Exception], int]] = [
     (DocumentNotFoundError, status.HTTP_404_NOT_FOUND),
+    (QuestionNotFoundError, status.HTTP_404_NOT_FOUND),
     (EmptyFileError, status.HTTP_400_BAD_REQUEST),
     (FileTooLargeError, status.HTTP_413_CONTENT_TOO_LARGE),
     (UnsupportedSourceError, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE),
@@ -39,6 +42,8 @@ def create_app(
     health_timeout: float,
     documents: DocumentService,
     max_upload_bytes: int,
+    ask: AskService,
+    question_max_chars: int,
     lifespan: Lifespan | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Fontes", lifespan=lifespan)
@@ -46,7 +51,9 @@ def create_app(
     app.state.health_timeout = health_timeout
     app.state.documents = documents
     app.state.max_upload_bytes = max_upload_bytes
-    for exc_class in (DocumentNotFoundError, DocumentError):
+    app.state.ask = ask
+    app.state.question_max_chars = question_max_chars
+    for exc_class in (DocumentNotFoundError, QuestionNotFoundError, DocumentError):
         app.add_exception_handler(exc_class, _error_response)
     app.add_middleware(
         BodySizeLimit,
@@ -55,4 +62,5 @@ def create_app(
     )
     app.include_router(health.router)
     app.include_router(documents_router)
+    app.include_router(ask_router)
     return app

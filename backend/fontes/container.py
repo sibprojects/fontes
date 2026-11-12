@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from fontes.adapters.embeddings.ollama import OllamaEmbedder
+from fontes.adapters.llm.ollama import OllamaLLM
 from fontes.adapters.loaders.html import parse_html
 from fontes.adapters.loaders.markdown import parse_markdown
 from fontes.adapters.loaders.pdf import parse_pdf
@@ -20,8 +21,10 @@ from fontes.adapters.messaging.topology import Topology
 from fontes.adapters.persistence.chunks import SqlChunkRepository
 from fontes.adapters.persistence.documents import SqlDocumentRepository
 from fontes.adapters.persistence.health import PostgresHealthCheck
+from fontes.adapters.persistence.questions import SqlQuestionRepository
 from fontes.adapters.storage.local import LocalFileStorage
 from fontes.api.app import create_app
+from fontes.application.asking import AskService
 from fontes.application.chunking import Chunker
 from fontes.application.documents import DocumentService
 from fontes.application.ingestion import IngestionService
@@ -29,21 +32,43 @@ from fontes.application.pipeline import IngestionPipeline
 from fontes.application.ports.embeddings import Embedder
 from fontes.application.ports.health import HealthCheck
 from fontes.application.ports.ingestion import DocumentProcessor
+from fontes.application.ports.llm import LLMProvider
 from fontes.application.ports.loading import DocumentLoader
 from fontes.config import Settings
 from fontes.domain.documents import SourceType
 from fontes.worker import Worker, logged
 
 
-def build_app(settings: Settings) -> FastAPI:
+def build_app(
+    settings: Settings,
+    embedder: Embedder | None = None,
+    llm: LLMProvider | None = None,
+) -> FastAPI:
     engine = create_async_engine(settings.database_url, pool_pre_ping=True)
     # Half the health budget, so a hung broker reports "connect timed out", not a bare timeout.
     amqp = AmqpConnection(settings.rabbitmq_url, connect_timeout=settings.health_check_timeout / 2)
+    # Only clients built here are ours to close; passed-in ones belong to the caller.
+    own_embedder: OllamaEmbedder | None = None
+    own_llm: OllamaLLM | None = None
+    if embedder is None:
+        embedder = own_embedder = _embedder(settings)
+    if llm is None:
+        llm = own_llm = OllamaLLM(
+            settings.ollama_url,
+            settings.chat_model,
+            num_ctx=settings.llm_num_ctx,
+            temperature=settings.llm_temperature,
+            timeout=settings.llm_timeout_seconds,
+        )
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         yield
         await amqp.close()
+        if own_embedder is not None:
+            await own_embedder.aclose()
+        if own_llm is not None:
+            await own_llm.aclose()
         await engine.dispose()
 
     checks: list[HealthCheck] = [
@@ -59,11 +84,21 @@ def build_app(settings: Settings) -> FastAPI:
         max_upload_bytes=settings.max_upload_bytes,
         publish_timeout=settings.publish_timeout_seconds,
     )
+    ask = AskService(
+        embedder,
+        SqlChunkRepository(sessions),
+        llm,
+        SqlQuestionRepository(sessions),
+        top_k=settings.ask_top_k,
+        min_score=settings.ask_min_score,
+    )
     return create_app(
         checks,
         health_timeout=settings.health_check_timeout,
         documents=documents,
         max_upload_bytes=settings.max_upload_bytes,
+        ask=ask,
+        question_max_chars=settings.question_max_chars,
         lifespan=lifespan,
     )
 
@@ -81,13 +116,7 @@ def build_worker(
     own_embedder: OllamaEmbedder | None = None
     if processor is None:
         if embedder is None:
-            embedder = own_embedder = OllamaEmbedder(
-                settings.ollama_url,
-                settings.embedding_model,
-                dimension=settings.embedding_dimension,
-                batch_size=settings.embed_batch_size,
-                timeout=settings.ollama_timeout_seconds,
-            )
+            embedder = own_embedder = _embedder(settings)
         processor = _pipeline(settings, sessions, embedder)
     service = IngestionService(
         SqlDocumentRepository(sessions),
@@ -134,3 +163,13 @@ def _pipeline(
         min_chars=settings.chunk_min_chars,
     )
     return IngestionPipeline(loaders, chunker, embedder, SqlChunkRepository(sessions))
+
+
+def _embedder(settings: Settings) -> OllamaEmbedder:
+    return OllamaEmbedder(
+        settings.ollama_url,
+        settings.embedding_model,
+        dimension=settings.embedding_dimension,
+        batch_size=settings.embed_batch_size,
+        timeout=settings.ollama_timeout_seconds,
+    )
