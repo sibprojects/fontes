@@ -107,3 +107,27 @@ def test_paragraph_of_only_invalid_markers_is_dropped() -> None:
 def test_brackets_that_are_not_markers_stay() -> None:
     (paragraph,) = verify("Use x[i] and [note] [1].", 2).paragraphs
     assert paragraph.text == "Use x[i] and [note] [1]."
+
+
+def test_markers_inside_inline_code_are_untouched() -> None:
+    (paragraph,) = verify("Use `arr[0]` and `a[2]` here [1].", 3).paragraphs
+    assert paragraph.text == "Use `arr[0]` and `a[2]` here [1]."
+    assert paragraph.citations == (1,)
+
+
+def test_index_after_identifier_is_not_a_marker() -> None:
+    result = verify("Set x = a[2] and f(x)[1] to fix.", 3)
+    assert result.text == "Set x = a[2] and f(x)[1] to fix."
+    assert result.label == AnswerLabel.UNSUPPORTED
+
+
+def test_markers_inside_fenced_code_are_untouched() -> None:
+    text = "Run this [2]:\n```py\nprint(a[1], b[ 9 ])\n```"
+    (paragraph,) = verify(text, 3).paragraphs
+    assert paragraph.text == text
+    assert paragraph.citations == (2,)
+
+
+def test_adjacent_markers_still_count() -> None:
+    (paragraph,) = verify("A [1][2] and B.[3]", 3).paragraphs
+    assert paragraph.citations == (1, 2, 3)

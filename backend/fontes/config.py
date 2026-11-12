@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     # Always sent: Ollama's default context window would silently cut the sources off.
     llm_num_ctx: int = 8192
     llm_temperature: float = 0.1
+    # The longest answer; a longer one is reported as cut off, not stored.
+    llm_max_tokens: int = 1024
     ask_top_k: int = 6
     # Cosine similarity; chunks below it are not relevant enough to answer from.
     ask_min_score: float = 0.45

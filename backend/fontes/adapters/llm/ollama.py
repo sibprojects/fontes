@@ -14,12 +14,16 @@ class OllamaLLM:
         model: str,
         num_ctx: int,
         temperature: float,
+        max_tokens: int,
         timeout: float,
         transport: httpx.AsyncBaseTransport | None = None,
     ) -> None:
         self._model = model
         # Ollama's default context window is small; the sources would be cut off silently.
-        self._options = {"num_ctx": num_ctx, "temperature": temperature}
+        # num_predict: a model stuck in a loop would otherwise stream for ever; the httpx
+        # timeout is per read and never trips while tokens keep coming.
+        self._options = {"num_ctx": num_ctx, "temperature": temperature, "num_predict": max_tokens}
+        self._max_tokens = max_tokens
         self._client = httpx.AsyncClient(base_url=base_url, timeout=timeout, transport=transport)
 
     @property
@@ -58,6 +62,11 @@ class OllamaLLM:
                     if content:
                         yield content
                     if data.get("done"):
+                        if data.get("done_reason") == "length":
+                            raise RuntimeError(
+                                f"The answer was cut off at {self._max_tokens} tokens "
+                                "(LLM_MAX_TOKENS); try a narrower question"
+                            )
                         return
         except httpx.TimeoutException as exc:
             raise TimeoutError(

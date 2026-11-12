@@ -19,6 +19,7 @@ def _llm(handle: Callable[[httpx.Request], httpx.Response]) -> OllamaLLM:
         "qwen2.5:7b",
         num_ctx=8192,
         temperature=0.1,
+        max_tokens=1024,
         timeout=5.0,
         transport=httpx.MockTransport(handle),
     )
@@ -51,7 +52,7 @@ async def test_request_sends_num_ctx_and_temperature() -> None:
     await _collect(_llm(handle))
     (body,) = seen
     assert body["model"] == "qwen2.5:7b"
-    assert body["options"] == {"num_ctx": 8192, "temperature": 0.1}
+    assert body["options"] == {"num_ctx": 8192, "temperature": 0.1, "num_predict": 1024}
     assert body["stream"] is True
     messages = body["messages"]
     assert isinstance(messages, list)
@@ -118,3 +119,15 @@ def test_settings_defaults() -> None:
     assert settings.ask_top_k == 6
     assert settings.ask_min_score == 0.45
     assert settings.question_max_chars == 2000
+    assert settings.llm_max_tokens == 1024
+
+
+async def test_answer_cut_off_at_the_token_cap_raises() -> None:
+    body = _ndjson({"message": {"content": "a"}}, {"done": True, "done_reason": "length"})
+    llm = _llm(lambda _: httpx.Response(200, content=body))
+    pieces: list[str] = []
+    with pytest.raises(RuntimeError, match="cut off at 1024 tokens"):
+        async for piece in llm.stream("sys", "user"):
+            pieces.append(piece)
+    await llm.aclose()
+    assert pieces == ["a"]

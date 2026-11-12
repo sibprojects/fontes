@@ -58,6 +58,7 @@ def build_app(
             settings.chat_model,
             num_ctx=settings.llm_num_ctx,
             temperature=settings.llm_temperature,
+            max_tokens=settings.llm_max_tokens,
             timeout=settings.llm_timeout_seconds,
         )
 

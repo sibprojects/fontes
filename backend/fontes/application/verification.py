@@ -9,7 +9,11 @@ _BLOCK_BREAK = re.compile(r"\n[ \t]*\n")
 _LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 # The whitespace before a marker is matched too, so that a removed marker leaves no gap.
 # Only spaces and tabs: a marker at the start of a line must not join it to the line above.
-_MARKER = re.compile(r"([ \t]*)\[\s*(\d+(?:\s*,\s*\d+)*)\s*\]")
+# A `[` right after a word character or `)` is an index (`a[2]`, `f(x)[1]`), not a marker;
+# `]` is allowed, so `[1][2]` still counts.
+_MARKER = re.compile(r"([ \t]*)(?<![\w)])\[\s*(\d+(?:\s*,\s*\d+)*)\s*\]")
+# Code is quoted, never cited: fenced blocks (an unclosed fence runs to the end) and inline spans.
+_CODE = re.compile(r"```.*?(?:```|\Z)|`[^`\n]*`", re.S)
 
 
 @dataclass(frozen=True)
@@ -23,7 +27,8 @@ def verify(text: str, source_count: int) -> Verification:
     """Check each paragraph for `[n]` markers that name one of the `source_count` sources.
 
     Invalid markers are removed from the text. A paragraph is supported if it keeps at least
-    one valid marker. An answer with no paragraphs at all is unsupported.
+    one valid marker. An answer with no paragraphs at all is unsupported. Brackets inside code
+    (inline or fenced) and indexes such as `a[2]` are left alone: they are not markers.
     """
     paragraphs = tuple(
         paragraph
@@ -65,5 +70,11 @@ def _clean(raw: str, source_count: int) -> Paragraph:
         cited.extend(n for n in valid if n not in cited)
         return match.group(1) + "".join(f"[{n}]" for n in valid)
 
-    text = _MARKER.sub(rewrite, raw).strip()
-    return Paragraph(text, tuple(cited))
+    pieces: list[str] = []
+    start = 0
+    for code in _CODE.finditer(raw):
+        pieces.append(_MARKER.sub(rewrite, raw[start : code.start()]))
+        pieces.append(code.group())
+        start = code.end()
+    pieces.append(_MARKER.sub(rewrite, raw[start:]))
+    return Paragraph("".join(pieces).strip(), tuple(cited))

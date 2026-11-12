@@ -83,6 +83,15 @@ services:
       STORAGE_DIR: /data/uploads
       OLLAMA_URL: http://ollama:11434
       CHAT_MODEL: ${CHAT_MODEL:-qwen2.5:7b}
+      # Ask settings (see README), overridable from the shell or a .env file next to this one;
+      # the fallbacks repeat the backend defaults.
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-300}
+      LLM_NUM_CTX: ${LLM_NUM_CTX:-8192}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.1}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-1024}
+      ASK_TOP_K: ${ASK_TOP_K:-6}
+      ASK_MIN_SCORE: ${ASK_MIN_SCORE:-0.45}
+      QUESTION_MAX_CHARS: ${QUESTION_MAX_CHARS:-2000}
     ports:
       - "8000:8000"
     volumes:

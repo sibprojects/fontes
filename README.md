@@ -99,6 +99,7 @@ A blank question, or one over 2000 characters, is rejected with `422` before any
 - **Valid markers.** A marker that names one of the sources given to the model is kept. A group like `[2, 1]` is rewritten as `[2][1]`.
 - **Invalid markers.** A marker that names a source the model never saw, such as `[9]` when there were 6 sources, is removed from the text.
 - **Paragraphs.** A paragraph is `supported` if at least one valid marker is left in it.
+- **Code.** Brackets inside code (`` `arr[0]` `` or a fenced block) and indexes such as `a[2]` are not markers: they are left as they are and never count as citations.
 
 | Label | Meaning |
 |---|---|
@@ -113,7 +114,7 @@ Verification checks that each claim *points at* a source, not that the source sa
 
 **History** keeps a snapshot of each cited source (title, location, excerpt), so old answers still show their sources after the document is deleted.
 
-Ask settings: `CHAT_MODEL` (`qwen2.5:7b`), `LLM_TIMEOUT_SECONDS` (300.0), `LLM_NUM_CTX` (8192: the model's context window, always sent, because Ollama's default would silently cut off the sources), `LLM_TEMPERATURE` (0.1), `ASK_TOP_K` (6: how many chunks are given to the model), `QUESTION_MAX_CHARS` (2000), and `ASK_MIN_SCORE` (0.45). `ASK_MIN_SCORE` is a cosine similarity threshold and is worth tuning on your own documents: raise it if unrelated questions get answered, lower it if real questions come back `not_found`.
+Ask settings: `CHAT_MODEL` (`qwen2.5:7b`), `LLM_TIMEOUT_SECONDS` (300.0), `LLM_NUM_CTX` (8192: the model's context window, always sent, because Ollama's default would silently cut off the sources), `LLM_TEMPERATURE` (0.1), `LLM_MAX_TOKENS` (1024: the longest answer; a longer one ends with an `error` event saying it was cut off), `ASK_TOP_K` (6: how many chunks are given to the model), `QUESTION_MAX_CHARS` (2000), and `ASK_MIN_SCORE` (0.45). `ASK_MIN_SCORE` is a cosine similarity threshold and is worth tuning on your own documents: raise it if unrelated questions get answered, lower it if real questions come back `not_found`. Under Compose these settings are passed to the `api` service, so set them in the shell or in a `.env` file next to `docker-compose.yml`, for example `ASK_MIN_SCORE=0.35 docker compose up -d api`.
 
 ## How ingestion works
 
