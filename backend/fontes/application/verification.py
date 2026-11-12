@@ -5,13 +5,15 @@ from dataclasses import dataclass
 
 from fontes.domain.answers import AnswerLabel, Paragraph
 
-_BLOCK_BREAK = re.compile(r"\n[ \t]*\n")
 _LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 # The whitespace before a marker is matched too, so that a removed marker leaves no gap.
 # Only spaces and tabs: a marker at the start of a line must not join it to the line above.
 # A `[` right after a word character or `)` is an index (`a[2]`, `f(x)[1]`), not a marker;
-# `]` is allowed, so `[1][2]` still counts.
-_MARKER = re.compile(r"([ \t]*)(?<![\w)])\[\s*(\d+(?:\s*,\s*\d+)*)\s*\]")
+# `]` is allowed, so `[1][2]` still counts. Fullwidth brackets (`【1】`, `［1］`), which some
+# models write, are never indexes; `\d` also matches fullwidth digits, and `int()` reads them.
+_MARKER = re.compile(r"([ \t]*)(?:(?<![\w)])\[|[［【])\s*(\d+(?:\s*[,，]\s*\d+)*)\s*[\]］】]")
+_SEPARATOR = re.compile(r"\s*[,，]\s*")
+_FENCE = "```"
 # Code is quoted, never cited: fenced blocks (an unclosed fence runs to the end) and inline spans.
 _CODE = re.compile(r"```.*?(?:```|\Z)|`[^`\n]*`", re.S)
 
@@ -29,6 +31,7 @@ def verify(text: str, source_count: int) -> Verification:
     Invalid markers are removed from the text. A paragraph is supported if it keeps at least
     one valid marker. An answer with no paragraphs at all is unsupported. Brackets inside code
     (inline or fenced) and indexes such as `a[2]` are left alone: they are not markers.
+    Fullwidth markers such as `【1】` count too and are rewritten as `[1]`.
     """
     paragraphs = tuple(
         paragraph
@@ -46,15 +49,28 @@ def verify(text: str, source_count: int) -> Verification:
 
 
 def _split(text: str) -> list[str]:
-    """Blocks are separated by blank lines; inside a block, each list item stands alone."""
+    """Blocks are separated by blank lines; inside a block, each list item stands alone.
+
+    A fenced code block belongs to the paragraph it starts in: blank lines and list-like
+    lines inside it split nothing.
+    """
     paragraphs: list[str] = []
-    for block in _BLOCK_BREAK.split(text):
-        current: list[str] = []
-        for line in block.split("\n"):
+    current: list[str] = []
+    in_fence = False
+    for line in text.split("\n"):
+        if line.strip().startswith(_FENCE):
+            in_fence = not in_fence
+        elif not in_fence:
+            if not line.strip():
+                if current:
+                    paragraphs.append("\n".join(current))
+                    current = []
+                continue
             if _LIST_ITEM.match(line) and current:
                 paragraphs.append("\n".join(current))
                 current = []
-            current.append(line)
+        current.append(line)
+    if current:
         paragraphs.append("\n".join(current))
     return paragraphs
 
@@ -63,7 +79,7 @@ def _clean(raw: str, source_count: int) -> Paragraph:
     cited: list[int] = []
 
     def rewrite(match: re.Match[str]) -> str:
-        numbers = [int(n) for n in re.split(r"\s*,\s*", match.group(2))]
+        numbers = [int(n) for n in _SEPARATOR.split(match.group(2))]
         valid = list(dict.fromkeys(n for n in numbers if 1 <= n <= source_count))
         if not valid:
             return ""

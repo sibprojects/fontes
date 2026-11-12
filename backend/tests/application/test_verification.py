@@ -131,3 +131,27 @@ def test_markers_inside_fenced_code_are_untouched() -> None:
 def test_adjacent_markers_still_count() -> None:
     (paragraph,) = verify("A [1][2] and B.[3]", 3).paragraphs
     assert paragraph.citations == (1, 2, 3)
+
+
+def test_fenced_code_with_blank_line_stays_one_paragraph() -> None:
+    text = "Run this [1]:\n```py\na = 1\n\nb = 2\n```"
+    (paragraph,) = verify(text, 3).paragraphs
+    assert paragraph.text == text
+    assert paragraph.citations == (1,)
+
+
+def test_list_lines_inside_fence_are_not_items() -> None:
+    text = "Example [1]:\n```\n- a\n- b\n```"
+    (paragraph,) = verify(text, 3).paragraphs
+    assert paragraph.text == text
+
+
+def test_text_after_a_fence_splits_again() -> None:
+    result = verify("A [1]:\n```\nx\n\ny\n```\n\nB [2].", 3)
+    assert [p.citations for p in result.paragraphs] == [(1,), (2,)]
+
+
+def test_fullwidth_markers_count_and_are_normalized() -> None:
+    (paragraph,) = verify("A 【1】 and B［2］ and C [３，1].", 3).paragraphs
+    assert paragraph.text == "A [1] and B[2] and C [3][1]."
+    assert paragraph.citations == (1, 2, 3)

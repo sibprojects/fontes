@@ -99,7 +99,8 @@ A blank question, or one over 2000 characters, is rejected with `422` before any
 - **Valid markers.** A marker that names one of the sources given to the model is kept. A group like `[2, 1]` is rewritten as `[2][1]`.
 - **Invalid markers.** A marker that names a source the model never saw, such as `[9]` when there were 6 sources, is removed from the text.
 - **Paragraphs.** A paragraph is `supported` if at least one valid marker is left in it.
-- **Code.** Brackets inside code (`` `arr[0]` `` or a fenced block) and indexes such as `a[2]` are not markers: they are left as they are and never count as citations.
+- **Code.** Brackets inside code (`` `arr[0]` `` or a fenced block) and indexes such as `a[2]` are not markers: they are left as they are and never count as citations. A fenced block is one paragraph even with blank lines inside.
+- **Fullwidth markers** such as `【1】` count too and are rewritten as `[1]`.
 
 | Label | Meaning |
 |---|---|
