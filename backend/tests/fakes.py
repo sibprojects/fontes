@@ -1,7 +1,7 @@
 import builtins
 import hashlib
 import math
-from collections.abc import Awaitable, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from dataclasses import replace
 from uuid import UUID
 
@@ -195,3 +195,29 @@ class FakeLoader:
         if isinstance(self.segments, Exception):
             raise self.segments
         return list(self.segments)
+
+
+class FakeLLM:
+    """Streams the given pieces; with `fail`, raises it after `fail_after` pieces."""
+
+    provider = "fake"
+    model = "fake-1"
+
+    def __init__(
+        self,
+        chunks: builtins.list[str] | None = None,
+        fail: Exception | None = None,
+        fail_after: int = 0,
+    ) -> None:
+        self.chunks = list(chunks or [])
+        self.fail = fail
+        self.fail_after = fail_after
+        self.calls: builtins.list[tuple[str, str]] = []
+
+    async def stream(self, system: str, user: str) -> AsyncIterator[str]:
+        self.calls.append((system, user))
+        pieces = self.chunks[: self.fail_after] if self.fail is not None else self.chunks
+        for piece in pieces:
+            yield piece
+        if self.fail is not None:
+            raise self.fail

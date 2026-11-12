@@ -15,6 +15,7 @@ from tests.chunk_repository_contract import (  # noqa: F401
     test_text_with_unusual_characters_round_trips,
 )
 from tests.fakes import (
+    FakeLLM,
     InMemoryChunkRepository,
     InMemoryDocumentRepository,
     InMemoryQuestionRepository,
@@ -55,3 +56,13 @@ def chunks(docs: InMemoryDocumentRepository) -> InMemoryChunkRepository:
 @pytest.fixture
 def questions() -> InMemoryQuestionRepository:
     return InMemoryQuestionRepository()
+
+
+async def test_fake_llm_streams_then_fails_after_n() -> None:
+    llm = FakeLLM(["a", "b", "c"], fail=RuntimeError("boom"), fail_after=2)
+    seen: list[str] = []
+    with pytest.raises(RuntimeError, match="boom"):
+        async for piece in llm.stream("sys", "user"):
+            seen.append(piece)
+    assert seen == ["a", "b"]
+    assert llm.calls == [("sys", "user")]
