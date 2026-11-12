@@ -35,7 +35,7 @@ services:
       timeout: 10s
       retries: 10
 
-  # Local embeddings. Models live in the `ollama` volume, so they are downloaded only once.
+  # Local embeddings and chat. Models live in the `ollama` volume, so they are downloaded once.
   ollama:
     image: ollama/ollama
     ports:
@@ -48,13 +48,16 @@ services:
       timeout: 5s
       retries: 20
 
-  # One-shot: downloads the embedding model (bge-m3, about 1.2 GB) on the first start;
-  # later starts find it in the volume and finish at once. The worker waits for it.
+  # One-shot: downloads the embedding model (bge-m3, about 1.2 GB) and the chat model
+  # (CHAT_MODEL, qwen2.5:7b by default, about 4.7 GB) on the first start; later starts find
+  # them in the volume and finish at once. The worker waits for it.
   ollama-pull:
     image: ollama/ollama
-    command: ["pull", "bge-m3"]
+    entrypoint: ["sh", "-c"]
+    command: ["ollama pull bge-m3 && ollama pull $${CHAT_MODEL}"]
     environment:
       OLLAMA_HOST: ollama:11434
+      CHAT_MODEL: ${CHAT_MODEL:-qwen2.5:7b}
     depends_on:
       ollama:
         condition: service_healthy
@@ -78,14 +81,20 @@ services:
       DATABASE_URL: postgresql+asyncpg://fontes:fontes@postgres:5432/fontes
       RABBITMQ_URL: amqp://fontes:fontes@rabbitmq:5672/
       STORAGE_DIR: /data/uploads
+      OLLAMA_URL: http://ollama:11434
+      CHAT_MODEL: ${CHAT_MODEL:-qwen2.5:7b}
     ports:
       - "8000:8000"
     volumes:
       - uploads:/data/uploads
+    # Not on ollama-pull: the API serves documents while the models download; asking before
+    # they are there gives an error event that says which model to pull.
     depends_on:
       migrate:
         condition: service_completed_successfully
       rabbitmq:
+        condition: service_healthy
+      ollama:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]

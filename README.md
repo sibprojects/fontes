@@ -18,7 +18,15 @@ You need Docker with Compose.
 docker compose up --build
 ```
 
-The first start downloads the embedding model `bge-m3` (about 1.2 GB) into the `ollama` volume, which takes a few minutes; the worker starts once it is there. Later starts reuse the volume.
+The first start downloads two models into the `ollama` volume, about 6 GB in total: the embedding model `bge-m3` (about 1.2 GB) and the chat model `qwen2.5:7b` (about 4.7 GB). That takes a while; the worker starts once they are there, and later starts reuse the volume. On a smaller machine pick a smaller chat model, for example `CHAT_MODEL=qwen2.5:3b docker compose up --build` (or `qwen2.5:1.5b`); answers get weaker as the model shrinks. Answering also needs memory for the model: about 6 GB for `qwen2.5:7b`.
+
+With an NVIDIA GPU, add the GPU overlay so Ollama runs on it (Docker Desktop on Windows supports this out of the box; Linux needs the NVIDIA Container Toolkit):
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
+```
+
+`qwen2.5:7b` fits in 8 GB of video memory. On a GPU an answer takes a second or two; on CPU, about a minute.
 
 To check that it works, run:
 
@@ -31,7 +39,7 @@ curl localhost:8000/health
 |---|---|
 | API | http://localhost:8000 (OpenAPI docs at `/docs`) |
 | RabbitMQ management | http://localhost:15672 (login `fontes` / `fontes`) |
-| Ollama | http://localhost:11434 (local embeddings) |
+| Ollama | http://localhost:11434 (local embeddings and chat) |
 | Worker | no port: consumes the ingest queue (`docker compose logs -f worker`) |
 
 Database migrations run automatically: the one-shot `migrate` service applies them before `api` and `worker` start.
@@ -45,6 +53,9 @@ Database migrations run automatically: the one-shot `migrate` service applies th
 | `GET` | `/documents` | List documents, newest first |
 | `GET` | `/documents/{id}/chunks` | The document's chunks in order: `[{"ordinal", "location", "text"}]` (empty until it is `ready`) |
 | `DELETE` | `/documents/{id}` | Delete a document, its stored file and its chunks |
+| `POST` | `/ask` | Ask a question: `{"question": "..."}`; the answer streams back as Server-Sent Events (see [Ask](#ask)) |
+| `GET` | `/questions` | The 50 latest questions, newest first: `[{"id", "question", "label", "created_at"}]` |
+| `GET` | `/questions/{id}` | One question with its full answer, paragraphs and citations |
 
 A new document is `201 Created`. Uploading the same content again, or adding the same URL, returns the existing document with `200 OK`. Errors come back as `{"detail": "..."}` with `400` (empty file), `413` (too large), `415` (unsupported type), `422` (invalid URL) or `404` (unknown id).
 
@@ -57,6 +68,52 @@ curl -X DELETE localhost:8000/documents/<id>
 ```
 
 A new document starts as `queued` and the worker takes it to `ready`; see [How ingestion works](#how-ingestion-works).
+
+## Ask
+
+`POST /ask` answers from the `ready` documents only. It finds the chunks closest to the question (cosine similarity of `bge-m3` vectors), hands them to the chat model as numbered sources, and streams the answer:
+
+```bash
+curl -N -H 'content-type: application/json' -d '{"question":"How do I install it?"}' localhost:8000/ask
+```
+
+```text
+event: token
+data: {"text": "Run `make install`"}
+
+event: token
+data: {"text": " [1]."}
+
+event: verdict
+data: {"question_id": "…", "label": "supported", "paragraphs": [{"text": "Run `make install` [1].", "supported": true, "citations": [1]}], "citations": [{"n": 1, "document_id": "…", "document_title": "guide.md", "location": "Install", "url": null, "excerpt": "…"}]}
+```
+
+- **`token`** events carry the answer as the model writes it. This text is provisional.
+- **`verdict`** comes once, at the end. It holds the verified answer, which is what is stored in the history. Show this one.
+- **`error`** (`{"detail": "..."}`) replaces the verdict if anything fails mid-way, for example `Cannot reach Ollama at http://ollama:11434`. A failed question is not stored.
+
+A blank question, or one over 2000 characters, is rejected with `422` before any streaming.
+
+**How verification works.** The model is told to put a source marker such as `[1]` or `[2][3]` in every paragraph and list item. After the answer is complete, Fontes splits it into paragraphs (blank-line separated) and list items, and checks each marker:
+
+- **Valid markers.** A marker that names one of the sources given to the model is kept. A group like `[2, 1]` is rewritten as `[2][1]`.
+- **Invalid markers.** A marker that names a source the model never saw, such as `[9]` when there were 6 sources, is removed from the text.
+- **Paragraphs.** A paragraph is `supported` if at least one valid marker is left in it.
+
+| Label | Meaning |
+|---|---|
+| `supported` | Every paragraph cites a real source |
+| `partially_supported` | Some paragraphs do, some don't |
+| `unsupported` | No paragraph does |
+| `not_found` | Nothing relevant was found, so the model was not asked |
+
+Verification checks that each claim *points at* a source, not that the source says it. The source excerpt is in the verdict's `citations`, so a reader can check.
+
+**Not found.** If no chunk scores at least `ASK_MIN_SCORE`, the model is not called at all. The answer is "I could not find anything about this in your documents." with the label `not_found`, and it is stored in the history like any other answer.
+
+**History** keeps a snapshot of each cited source (title, location, excerpt), so old answers still show their sources after the document is deleted.
+
+Ask settings: `CHAT_MODEL` (`qwen2.5:7b`), `LLM_TIMEOUT_SECONDS` (300.0), `LLM_NUM_CTX` (8192: the model's context window, always sent, because Ollama's default would silently cut off the sources), `LLM_TEMPERATURE` (0.1), `ASK_TOP_K` (6: how many chunks are given to the model), `QUESTION_MAX_CHARS` (2000), and `ASK_MIN_SCORE` (0.45). `ASK_MIN_SCORE` is a cosine similarity threshold and is worth tuning on your own documents: raise it if unrelated questions get answered, lower it if real questions come back `not_found`.
 
 ## How ingestion works
 
@@ -108,6 +165,8 @@ The vector dimension is fixed by the database migration (`vector(1024)` for `bge
 - **Scanned PDFs** (images with no text layer) are rejected with "No text could be extracted"; there is no OCR. DOCX is not supported.
 - **Private addresses.** A URL whose host resolves to a private, loopback or link-local address is refused, at every redirect. DNS rebinding (a host that resolves differently between the check and the fetch) is not defended against; acceptable for a local, single-user app.
 - **Long documents on CPU.** RabbitMQ's default consumer timeout is 30 minutes: a document that takes longer to embed is redelivered and counts another attempt.
+- **Answer speed on CPU.** Without a GPU, `qwen2.5:7b` writes a few tokens per second, and the first question also loads the model into memory. A full answer can take a minute or more. A smaller `CHAT_MODEL` is faster.
+- **Each question stands alone.** There is no conversation: a follow-up such as "and the second one?" does not see the previous question.
 
 ## Why not Celery
 
@@ -136,7 +195,7 @@ docker compose up -d postgres rabbitmq
 cd backend && uv run pytest -m integration
 ```
 
-CI runs all of the above on every push and pull request to `main`. A second job then builds the image, starts the whole stack with Compose and runs `scripts/smoke.sh`, which uploads a file, waits for it to become `ready` with real Ollama embeddings (the job pulls `bge-m3`), and checks that its chunks are stored. You can run the same check against your local stack:
+CI runs all of the above on every push and pull request to `main`. A second job then builds the image, starts the whole stack with Compose and runs `scripts/smoke.sh`, which uploads a file, waits for it to become `ready` with real Ollama embeddings (the job pulls `bge-m3`), checks that its chunks are stored, then asks one question through `POST /ask` and checks that it ends with a verdict and lands in the history. CI uses the small `qwen2.5:0.5b` chat model: it checks the wiring, not the quality of answers. You can run the same check against your local stack:
 
 ```bash
 scripts/smoke.sh   # or: scripts/smoke.sh http://host:8000
