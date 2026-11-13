@@ -190,6 +190,17 @@ uv run ruff format --check .   # formatting
 uv run mypy fontes tests       # type check (strict)
 ```
 
+The frontend lives in `frontend/` (React, TypeScript, Vite) and uses npm:
+
+```bash
+cd frontend
+npm ci
+npm run dev      # http://localhost:5173, proxies /api to the API on localhost:8000
+npm test         # unit tests (Vitest)
+npm run lint     # lint (oxlint)
+npm run build    # type check and production build
+```
+
 The integration tests need real Postgres and RabbitMQ. Start them first, then run the tests:
 
 ```bash
@@ -197,7 +208,7 @@ docker compose up -d postgres rabbitmq
 cd backend && uv run pytest -m integration
 ```
 
-CI runs all of the above on every push and pull request to `main`. A second job then builds the image, starts the whole stack with Compose and runs `scripts/smoke.sh`, which uploads a file, waits for it to become `ready` with real Ollama embeddings (the job pulls `bge-m3`), checks that its chunks are stored, then asks one question through `POST /ask` and checks that it ends with a verdict and lands in the history. CI uses the small `qwen2.5:0.5b` chat model: it checks the wiring, not the quality of answers. You can run the same check against your local stack:
+CI runs all of the above, backend and frontend, on every push and pull request to `main`. A second job then builds the image, starts the whole stack with Compose and runs `scripts/smoke.sh`, which uploads a file, waits for it to become `ready` with real Ollama embeddings (the job pulls `bge-m3`), checks that its chunks are stored, then asks one question through `POST /ask` and checks that it ends with a verdict and lands in the history. CI uses the small `qwen2.5:0.5b` chat model: it checks the wiring, not the quality of answers. You can run the same check against your local stack:
 
 ```bash
 scripts/smoke.sh   # or: scripts/smoke.sh http://host:8000
