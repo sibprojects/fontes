@@ -59,6 +59,7 @@ class Env:
             health_timeout=1.0,
             documents=documents,
             max_upload_bytes=100,
+            max_attempts=3,
             ask=self.ask,
             question_max_chars=2000,
         )

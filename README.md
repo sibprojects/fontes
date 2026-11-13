@@ -50,7 +50,7 @@ Database migrations run automatically: the one-shot `migrate` service applies th
 |---|---|---|
 | `POST` | `/documents` | Upload a file (multipart field `file`): `.pdf`, `.md`, `.markdown`, `.html`, `.htm`, up to 20 MiB |
 | `POST` | `/documents/url` | Add a web page by URL: `{"url": "https://..."}` |
-| `GET` | `/documents` | List documents, newest first |
+| `GET` | `/documents` | List documents, newest first. Each has `status`, `error`, `attempts` and `max_attempts` (`INGEST_MAX_ATTEMPTS`), so a client can show "retry 2/3" |
 | `GET` | `/documents/{id}/chunks` | The document's chunks in order: `[{"ordinal", "location", "text"}]` (empty until it is `ready`) |
 | `DELETE` | `/documents/{id}` | Delete a document, its stored file and its chunks |
 | `POST` | `/ask` | Ask a question: `{"question": "..."}`; the answer streams back as Server-Sent Events (see [Ask](#ask)) |

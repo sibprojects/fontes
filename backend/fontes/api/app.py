@@ -42,6 +42,7 @@ def create_app(
     health_timeout: float,
     documents: DocumentService,
     max_upload_bytes: int,
+    max_attempts: int,
     ask: AskService,
     question_max_chars: int,
     lifespan: Lifespan | None = None,
@@ -51,6 +52,7 @@ def create_app(
     app.state.health_timeout = health_timeout
     app.state.documents = documents
     app.state.max_upload_bytes = max_upload_bytes
+    app.state.max_attempts = max_attempts
     app.state.ask = ask
     app.state.question_max_chars = question_max_chars
     for exc_class in (DocumentNotFoundError, QuestionNotFoundError, DocumentError):

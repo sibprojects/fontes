@@ -4,6 +4,7 @@ from fastapi import APIRouter, Request, Response, UploadFile, status
 
 from fontes.api.schemas import ChunkOut, DocumentOut, UrlIn
 from fontes.application.documents import AddResult, DocumentService, FileTooLargeError
+from fontes.domain.documents import Document
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
@@ -13,9 +14,14 @@ def _service(request: Request) -> DocumentService:
     return service
 
 
-def _added(result: AddResult, response: Response) -> DocumentOut:
+def _out(doc: Document, request: Request) -> DocumentOut:
+    max_attempts: int = request.app.state.max_attempts
+    return DocumentOut.from_domain(doc, max_attempts)
+
+
+def _added(result: AddResult, request: Request, response: Response) -> DocumentOut:
     response.status_code = status.HTTP_201_CREATED if result.created else status.HTTP_200_OK
-    return DocumentOut.from_domain(result.document)
+    return _out(result.document, request)
 
 
 @router.post(
@@ -30,7 +36,7 @@ async def upload(file: UploadFile, request: Request, response: Response) -> Docu
     if len(data) > limit:
         raise FileTooLargeError(f"The file exceeds the {limit}-byte limit")
     result = await _service(request).upload(file.filename or "", data)
-    return _added(result, response)
+    return _added(result, request, response)
 
 
 @router.post(
@@ -39,12 +45,12 @@ async def upload(file: UploadFile, request: Request, response: Response) -> Docu
     responses={200: {"description": "The URL was already added"}},
 )
 async def add_url(body: UrlIn, request: Request, response: Response) -> DocumentOut:
-    return _added(await _service(request).add_url(body.url), response)
+    return _added(await _service(request).add_url(body.url), request, response)
 
 
 @router.get("")
 async def list_documents(request: Request) -> list[DocumentOut]:
-    return [DocumentOut.from_domain(d) for d in await _service(request).list()]
+    return [_out(d, request) for d in await _service(request).list()]
 
 
 @router.get("/{document_id}/chunks")

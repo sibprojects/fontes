@@ -51,6 +51,7 @@ def health_app(checks: list[HealthCheck], health_timeout: float) -> FastAPI:
         health_timeout,
         documents=service,
         max_upload_bytes=100,
+        max_attempts=3,
         ask=fake_ask_service(repo),
         question_max_chars=2000,
     )

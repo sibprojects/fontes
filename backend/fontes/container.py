@@ -98,6 +98,7 @@ def build_app(
         health_timeout=settings.health_check_timeout,
         documents=documents,
         max_upload_bytes=settings.max_upload_bytes,
+        max_attempts=settings.ingest_max_attempts,
         ask=ask,
         question_max_chars=settings.question_max_chars,
         lifespan=lifespan,

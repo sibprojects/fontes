@@ -16,10 +16,12 @@ class DocumentOut(BaseModel):
     url: str | None
     error: str | None
     attempts: int
+    # How many attempts ingestion makes before it gives up, for "retry 2/3".
+    max_attempts: int
     created_at: datetime
 
     @classmethod
-    def from_domain(cls, doc: Document) -> "DocumentOut":
+    def from_domain(cls, doc: Document, max_attempts: int) -> "DocumentOut":
         return cls(
             id=doc.id,
             title=doc.title,
@@ -28,6 +30,7 @@ class DocumentOut(BaseModel):
             url=doc.url,
             error=doc.error,
             attempts=doc.attempts,
+            max_attempts=max_attempts,
             created_at=doc.created_at,
         )
 

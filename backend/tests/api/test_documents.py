@@ -46,6 +46,7 @@ async def c(
         health_timeout=1.0,
         documents=service,
         max_upload_bytes=LIMIT,
+        max_attempts=3,
         ask=fake_ask_service(repo),
         question_max_chars=2000,
     )
@@ -71,6 +72,7 @@ async def test_upload_returns_201_and_lists(c: AsyncClient) -> None:
         "url",
         "error",
         "attempts",
+        "max_attempts",
         "created_at",
     }
     listed = await c.get("/documents")
@@ -211,3 +213,10 @@ async def test_list_chunks_unknown_document_404(c: AsyncClient) -> None:
     r = await c.get(f"/documents/{uuid4()}/chunks")
     assert r.status_code == 404
     assert isinstance(r.json()["detail"], str)
+
+
+async def test_documents_carry_max_attempts(c: AsyncClient) -> None:
+    created = await c.post("/documents", files={"file": ("a.md", b"# A\n\ntext", "text/markdown")})
+    assert created.json()["max_attempts"] == 3
+    (listed,) = (await c.get("/documents")).json()
+    assert listed["max_attempts"] == 3
