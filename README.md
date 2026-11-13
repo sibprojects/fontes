@@ -195,7 +195,7 @@ The frontend lives in `frontend/` (React, TypeScript, Vite) and uses npm:
 ```bash
 cd frontend
 npm ci
-npm run dev      # http://localhost:5173, proxies /api to the API on localhost:8000
+npm run dev      # http://localhost:25173, proxies /api to the API on localhost:8000
 npm test         # unit tests (Vitest)
 npm run lint     # lint (oxlint)
 npm run build    # type check and production build
