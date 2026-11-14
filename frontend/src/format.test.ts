@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DocumentOut } from './api/types'
-import { errorText, statusText } from './format'
+import { errorText, labelText, statusText } from './format'
 
 function doc(overrides: Partial<DocumentOut>): DocumentOut {
   return {
@@ -28,4 +28,11 @@ describe('statusText', () => {
 describe('errorText', () => {
   it('uses the message of an Error', () => expect(errorText(new Error('boom'))).toBe('boom'))
   it('stringifies anything else', () => expect(errorText('boom')).toBe('boom'))
+})
+
+describe('labelText', () => {
+  it('supported', () => expect(labelText('supported')).toBe('Supported by sources'))
+  it('partially_supported', () => expect(labelText('partially_supported')).toBe('Partly supported'))
+  it('unsupported', () => expect(labelText('unsupported')).toBe('Not supported by sources'))
+  it('not_found', () => expect(labelText('not_found')).toBe('Nothing found in your documents'))
 })

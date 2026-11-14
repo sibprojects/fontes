@@ -161,3 +161,109 @@ table.documents th {
   color: var(--bad);
   font-size: 0.85em;
 }
+
+/* Ask */
+.ask-form {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.ask-form label {
+  font-weight: 600;
+}
+
+.ask-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  resize: vertical;
+}
+
+.ask-form button {
+  justify-self: start;
+}
+
+.answer {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.answer .question {
+  font-size: 1.1rem;
+  margin: 0 0 8px;
+}
+
+.paragraph {
+  white-space: pre-wrap;
+  margin: 12px 0;
+}
+
+.provisional .paragraph {
+  color: var(--muted);
+}
+
+.unsupported {
+  background: var(--highlight);
+  border-left: 3px solid var(--warn);
+  padding: 4px 8px;
+}
+
+.no-source {
+  color: var(--warn);
+  font-size: 0.85em;
+}
+
+.label {
+  display: inline-block;
+  padding: 0 10px;
+  border-radius: 999px;
+  font-size: 0.85em;
+  background: var(--line);
+}
+
+.label-supported {
+  background: #e3f1e4;
+  color: var(--ok);
+}
+
+.label-partially_supported,
+.label-verifying {
+  background: #fff1db;
+  color: var(--warn);
+}
+
+.label-unsupported {
+  background: #fdecea;
+  color: var(--bad);
+}
+
+.label-not_found {
+  color: var(--muted);
+}
+
+.sources {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sources li {
+  margin: 4px 0;
+}
+
+.sources summary {
+  cursor: pointer;
+}
+
+.excerpt {
+  white-space: pre-wrap;
+  margin: 8px 0 8px 16px;
+  padding-left: 12px;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
+}

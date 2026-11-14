@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { AskPage } from './ask/AskPage'
 import { DocumentsPage } from './documents/DocumentsPage'
 
 type Tab = 'documents' | 'ask'
@@ -25,7 +26,7 @@ export default function App() {
           <DocumentsPage />
         </div>
         <div hidden={tab !== 'ask'}>
-          <p className="muted">Asking comes next.</p>
+          <AskPage />
         </div>
       </main>
     </div>
