@@ -28,7 +28,9 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 
 `qwen2.5:7b` fits in 8 GB of video memory. On a GPU an answer takes a second or two; on CPU, about a minute.
 
-To check that it works, run:
+Then open **http://localhost:28080**: upload a document on the Documents tab, wait for it to be `ready`, and ask about it on the Ask tab.
+
+To check the API directly, run:
 
 ```bash
 curl localhost:8000/health
@@ -37,6 +39,7 @@ curl localhost:8000/health
 
 | Service | URL |
 |---|---|
+| Web UI | http://localhost:28080 (nginx; also proxies the API at `/api/...`) |
 | API | http://localhost:8000 (OpenAPI docs at `/docs`) |
 | RabbitMQ management | http://localhost:15672 (login `fontes` / `fontes`) |
 | Ollama | http://localhost:11434 (local embeddings and chat) |
@@ -116,6 +119,18 @@ Verification checks that each claim *points at* a source, not that the source sa
 **History** keeps a snapshot of each cited source (title, location, excerpt), so old answers still show their sources after the document is deleted.
 
 Ask settings: `CHAT_MODEL` (`qwen2.5:7b`), `LLM_TIMEOUT_SECONDS` (300.0), `LLM_NUM_CTX` (8192: the model's context window, always sent, because Ollama's default would silently cut off the sources), `LLM_TEMPERATURE` (0.1), `LLM_MAX_TOKENS` (1024: the longest answer; a longer one ends with an `error` event saying it was cut off), `ASK_TOP_K` (6: how many chunks are given to the model), `QUESTION_MAX_CHARS` (2000), and `ASK_MIN_SCORE` (0.45). `ASK_MIN_SCORE` is a cosine similarity threshold and is worth tuning on your own documents: raise it if unrelated questions get answered, lower it if real questions come back `not_found`. Under Compose these settings are passed to the `api` service, so set them in the shell or in a `.env` file next to `docker-compose.yml`, for example `ASK_MIN_SCORE=0.35 docker compose up -d api`.
+
+## Frontend
+
+The web UI in `frontend/` is a small React + TypeScript app built with Vite. It has three areas:
+
+- **Documents:** upload a file or add a URL, watch the status (`queued`, `processing…`, `retry 2/3`, `ready`, `failed` with the reason), delete a document. The list refreshes itself while anything is being ingested.
+- **Ask:** the answer streams in under a "verifying…" mark. When the verdict arrives it is replaced by the verified answer: the label, unsupported paragraphs highlighted, and the sources below; click a source to see the excerpt the model was given.
+- **History:** a sidebar of past questions; click one to see its stored answer and sources.
+
+The app calls the API under `/api`. In Compose, nginx serves the build and proxies `/api/` to the `api` service with buffering off, so the answer streams token by token; in development, Vite does the same proxying. The browser sees one origin, so the API needs no CORS. `POST /ask` is read with `fetch` and a small SSE parser, because the browser's `EventSource` only does `GET`.
+
+It is kept deliberately plain, because the frontend is not the point of the project: no router (two tabs in `useState`), no state library, no CSS framework, no Markdown renderer (answers are shown as text with their line breaks). The API types in `src/api/types.ts` are written by hand to mirror `backend/fontes/api/schemas.py`.
 
 ## How ingestion works
 
@@ -208,8 +223,8 @@ docker compose up -d postgres rabbitmq
 cd backend && uv run pytest -m integration
 ```
 
-CI runs all of the above, backend and frontend, on every push and pull request to `main`. A second job then builds the image, starts the whole stack with Compose and runs `scripts/smoke.sh`, which uploads a file, waits for it to become `ready` with real Ollama embeddings (the job pulls `bge-m3`), checks that its chunks are stored, then asks one question through `POST /ask` and checks that it ends with a verdict and lands in the history. CI uses the small `qwen2.5:0.5b` chat model: it checks the wiring, not the quality of answers. You can run the same check against your local stack:
+CI runs all of the above, backend and frontend, on every push and pull request to `main`. A second job then builds the images, starts the whole stack with Compose and runs `scripts/smoke.sh`, which checks that the UI is served and its `/api` proxy works, uploads a file, waits for it to become `ready` with real Ollama embeddings (the job pulls `bge-m3`), checks that its chunks are stored, then asks one question through `POST /ask` and checks that it ends with a verdict and lands in the history. CI uses the small `qwen2.5:0.5b` chat model: it checks the wiring, not the quality of answers. You can run the same check against your local stack:
 
 ```bash
-scripts/smoke.sh   # or: scripts/smoke.sh http://host:8000
+scripts/smoke.sh   # or: scripts/smoke.sh http://host:8000 http://host:28080
 ```

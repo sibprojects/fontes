@@ -132,6 +132,22 @@ services:
       ollama-pull:
         condition: service_completed_successfully
 
+  # The web UI: nginx serves the built React app and proxies /api/ to the api. Host port
+  # 28080: above 15000 like the others, and clear of the common 8080.
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    ports:
+      - "28080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   pgdata:
   rabbitmq:

@@ -2,16 +2,25 @@
 # End-to-end smoke test of a running stack: health, upload, ingestion through the worker
 # (parse, chunk, embed with Ollama, store), the stored chunks, then one question through
 # POST /ask (SSE) and its entry in the history.
-# Usage: scripts/smoke.sh [base-url]   (default http://127.0.0.1:8000). Needs curl, grep, sed.
+# Usage: scripts/smoke.sh [base-url] [ui-url]   (defaults http://127.0.0.1:8000 and
+# http://127.0.0.1:28080). Needs curl, grep, sed.
 set -euo pipefail
 
 BASE="${1:-http://127.0.0.1:8000}"
+UI="${2:-http://127.0.0.1:28080}"
 # The first embedding loads the model into memory, which can take a while on CPU.
 TIMEOUT_SECONDS=180
 # The first answer also loads the chat model.
 ASK_TIMEOUT_SECONDS=300
 
 echo "health: $(curl -fsS "$BASE/health")"
+
+# The UI is served, and its /api proxy reaches the API.
+if [[ "$(curl -fsS "$UI/")" != *'<div id="root">'* ]]; then
+  echo "the UI at $UI/ did not serve the app" >&2
+  exit 1
+fi
+echo "ui proxy health: $(curl -fsS "$UI/api/health")"
 
 cd "$(mktemp -d)"  # a relative path also works for the Windows build of curl
 file=smoke.md

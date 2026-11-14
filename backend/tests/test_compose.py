@@ -28,3 +28,22 @@ def test_api_forwards_every_ask_setting() -> None:
     api = _service("api")
     missing = [n for n in TUNABLE if not re.search(rf"^\s+{n}: \${{{n}(:-[^}}]*)?}}", api, re.M)]
     assert missing == []
+
+
+def test_frontend_proxies_api_without_buffering() -> None:
+    frontend = _service("frontend")
+    assert "build: ./frontend" in frontend
+    assert '"28080:80"' in frontend
+    conf = (COMPOSE.parent / "frontend" / "nginx.conf").read_text(encoding="utf-8")
+    # The api's address is looked up per request through Docker's DNS, so a recreated api
+    # container (new IP) is found again; the /api prefix is stripped, as the Vite proxy does.
+    assert "resolver 127.0.0.11" in conf
+    assert "set $api http://api:8000;" in conf
+    assert "rewrite ^/api/(.*)$ /$1 break;" in conf
+    assert "proxy_pass $api;" in conf
+    # SSE tokens must reach the browser as they are written.
+    assert "proxy_buffering off;" in conf
+    # Above the 20 MiB upload limit, so a too-large file gets the API's JSON 413.
+    body = re.search(r"client_max_body_size\s+(\d+)m;", conf)
+    assert body
+    assert int(body[1]) > 20
