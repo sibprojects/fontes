@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
+import { getQuestion } from '../api/client'
 import { ask } from '../api/sse'
 import type { Verdict } from '../api/types'
 import { errorText } from '../format'
@@ -15,16 +16,45 @@ type View =
   | { kind: 'failed'; question: string; detail: string }
 
 type Props = {
+  /** A past question to show from the history; null shows the current one. */
+  historyId?: string | null
+  /** Called when a new question is sent, so the parent can clear the history selection. */
+  onAsk?: () => void
   onAnswered?: (questionId: string) => void
 }
 
-export function AskPage({ onAnswered }: Props) {
+export function AskPage({ historyId = null, onAsk, onAnswered }: Props) {
   const [question, setQuestion] = useState('')
   const [view, setView] = useState<View>({ kind: 'idle' })
   const controller = useRef<AbortController | null>(null)
 
   // Leaving the page stops the answer; the API then stores nothing.
   useEffect(() => () => controller.current?.abort(), [])
+
+  // Opening a past question replaces whatever is shown, a running answer included.
+  useEffect(() => {
+    if (!historyId) return
+    controller.current?.abort()
+    let current = true
+    getQuestion(historyId).then(
+      (answer) =>
+        current &&
+        setView({
+          kind: 'answered',
+          question: answer.question,
+          verdict: {
+            question_id: answer.id,
+            label: answer.label,
+            paragraphs: answer.paragraphs,
+            citations: answer.citations,
+          },
+        }),
+      (e: unknown) => current && setView({ kind: 'failed', question: '', detail: errorText(e) }),
+    )
+    return () => {
+      current = false
+    }
+  }, [historyId])
 
   const streaming = view.kind === 'streaming'
 
@@ -33,6 +63,7 @@ export function AskPage({ onAnswered }: Props) {
     if (!asked || streaming) return
     const current = new AbortController()
     controller.current = current
+    onAsk?.()
     setView({ kind: 'streaming', question: asked, text: '' })
     try {
       for await (const event of ask(asked, current.signal)) {
@@ -99,7 +130,7 @@ export function AskPage({ onAnswered }: Props) {
 
       {view.kind === 'failed' && (
         <article className="answer">
-          <h2 className="question">{view.question}</h2>
+          {view.question && <h2 className="question">{view.question}</h2>}
           <p role="alert" className="error">
             {view.detail}
           </p>

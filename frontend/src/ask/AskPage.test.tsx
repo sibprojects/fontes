@@ -1,12 +1,29 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ApiError } from '../api/client'
+import { ApiError, getQuestion } from '../api/client'
 import { ask } from '../api/sse'
-import type { AskEvent, Verdict } from '../api/types'
+import type { AnswerOut, AskEvent, Verdict } from '../api/types'
 import { AskPage } from './AskPage'
 
 vi.mock('../api/sse', () => ({ ask: vi.fn() }))
+vi.mock('../api/client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api/client')>()),
+  getQuestion: vi.fn(),
+}))
+
+const stored: AnswerOut = {
+  id: 'q9',
+  question: 'What did I ask before?',
+  answer: 'An old claim.',
+  label: 'unsupported',
+  paragraphs: [{ text: 'An old claim.', supported: false, citations: [] }],
+  citations: [],
+  provider: 'ollama',
+  model: 'qwen2.5:7b',
+  duration_ms: 1200,
+  created_at: '2026-11-13T10:00:00Z',
+}
 
 const verdict: Verdict = {
   question_id: 'q1',
@@ -124,5 +141,28 @@ describe('AskPage', () => {
     await screen.findByText('verifying…')
     unmount()
     expect(signal?.aborted).toBe(true)
+  })
+
+  it('shows a stored answer for historyId', async () => {
+    vi.mocked(getQuestion).mockResolvedValue(stored)
+    render(<AskPage historyId="q9" />)
+    expect(await screen.findByText('What did I ask before?')).toBeInTheDocument()
+    expect(getQuestion).toHaveBeenCalledWith('q9')
+    expect(screen.getByText('Not supported by sources')).toBeInTheDocument()
+    expect(screen.getByText(/no source/)).toBeInTheDocument()
+  })
+
+  it('shows why a stored answer could not be loaded', async () => {
+    vi.mocked(getQuestion).mockRejectedValue(new ApiError(404, 'Question not found'))
+    render(<AskPage historyId="q9" />)
+    expect(await screen.findByRole('alert')).toHaveTextContent('Question not found')
+  })
+
+  it('asking calls onAsk so the history selection is cleared', async () => {
+    vi.mocked(ask).mockImplementation(events({ type: 'verdict', verdict }))
+    const onAsk = vi.fn()
+    render(<AskPage onAsk={onAsk} />)
+    await askQuestion()
+    expect(onAsk).toHaveBeenCalledTimes(1)
   })
 })
