@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, addUrl, deleteDocument, listDocuments, uploadDocument } from '../api/client'
@@ -101,7 +101,8 @@ describe('DocumentsPage', () => {
     await user.type(screen.getByLabelText('URL'), 'https://example.com')
     await user.click(screen.getByRole('button', { name: 'Add URL' }))
     expect(addUrl).toHaveBeenCalledWith('https://example.com')
-    expect(list).toHaveBeenCalledTimes(2)
+    // The re-fetch runs in an effect after the next render, not inside the click.
+    await waitFor(() => expect(list).toHaveBeenCalledTimes(2))
   })
 
   it('shows the API detail when an upload is rejected', async () => {
