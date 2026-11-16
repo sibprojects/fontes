@@ -13,7 +13,11 @@ function isBusy(doc: DocumentOut): boolean {
 export function DocumentsPage() {
   // null until the first fetch answers, so the empty state does not flash.
   const [docs, setDocs] = useState<DocumentOut[] | null>(null)
-  const [error, setError] = useState<string | null>(null)
+  // A failed list fetch and a failed action are kept apart: the next good fetch clears the
+  // first, the next action the second.
+  const [listError, setListError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const error = actionError ?? listError
   const [file, setFile] = useState<File | null>(null)
   // Changing the key re-creates the file input, which is the simple way to clear it.
   const [fileInputKey, setFileInputKey] = useState(0)
@@ -21,34 +25,43 @@ export function DocumentsPage() {
 
   // Bumping this re-fetches the list.
   const [reload, setReload] = useState(0)
+  // Bumped when a fetch settles, either way, so the poll below re-arms even after a failure.
+  const [settled, setSettled] = useState(0)
 
   useEffect(() => {
     // A slower, older answer must not overwrite a newer one.
     let current = true
-    listDocuments().then(
-      (fetched) => current && setDocs(fetched),
-      (e: unknown) => current && setError(errorText(e)),
-    )
+    listDocuments()
+      .then(
+        (fetched) => {
+          if (!current) return
+          setDocs(fetched)
+          setListError(null)
+        },
+        (e: unknown) => current && setListError(errorText(e)),
+      )
+      .finally(() => current && setSettled((n) => n + 1))
     return () => {
       current = false
     }
   }, [reload])
 
-  // While anything is queued or processing, fetch again after POLL_MS. Each fetch gives a
-  // new `docs`, which re-runs this effect; once nothing is busy, no timer is set.
+  // While anything is queued or processing, or the last fetch failed (say, the api is
+  // restarting), fetch again after POLL_MS. Every settled fetch re-runs this effect; once
+  // nothing is busy and the fetch worked, no timer is set.
   useEffect(() => {
-    if (!docs?.some(isBusy)) return
+    if (!listError && !docs?.some(isBusy)) return
     const timer = setTimeout(() => setReload((n) => n + 1), POLL_MS)
     return () => clearTimeout(timer)
-  }, [docs])
+  }, [settled, docs, listError])
 
   // Runs one user action, shows its error if it fails, and re-fetches the list either way.
   async function run(action: () => Promise<unknown>) {
-    setError(null)
+    setActionError(null)
     try {
       await action()
     } catch (e) {
-      setError(errorText(e))
+      setActionError(errorText(e))
     }
     setReload((n) => n + 1)
   }

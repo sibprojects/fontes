@@ -82,6 +82,30 @@ describe('DocumentsPage', () => {
     expect(list).toHaveBeenCalledTimes(2)
   })
 
+  it('keeps polling through a failed fetch and clears its error', async () => {
+    list
+      .mockResolvedValueOnce([doc({ status: 'processing' })])
+      .mockRejectedValueOnce(new ApiError(502, 'HTTP 502'))
+      .mockResolvedValue([doc({ status: 'ready' })])
+    setup()
+    expect(await screen.findByText('processing…')).toBeInTheDocument()
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MS))
+    expect(await screen.findByRole('alert')).toHaveTextContent('HTTP 502')
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MS))
+    expect(await screen.findByText('ready')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(list).toHaveBeenCalledTimes(3)
+  })
+
+  it('retries a failed first fetch', async () => {
+    list.mockRejectedValueOnce(new ApiError(502, 'HTTP 502')).mockResolvedValue([doc({})])
+    setup()
+    expect(await screen.findByRole('alert')).toHaveTextContent('HTTP 502')
+    await act(() => vi.advanceTimersByTimeAsync(POLL_MS))
+    expect(await screen.findByText('guide.md')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('uploads the chosen file and refreshes', async () => {
     list.mockResolvedValueOnce([]).mockResolvedValue([doc({ status: 'queued', attempts: 0 })])
     vi.mocked(uploadDocument).mockResolvedValue(doc({}))

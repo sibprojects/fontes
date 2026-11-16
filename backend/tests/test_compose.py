@@ -47,3 +47,12 @@ def test_frontend_proxies_api_without_buffering() -> None:
     body = re.search(r"client_max_body_size\s+(\d+)m;", conf)
     assert body
     assert int(body[1]) > 20
+
+
+def test_frontend_index_is_revalidated() -> None:
+    conf = (COMPOSE.parent / "frontend" / "nginx.conf").read_text(encoding="utf-8")
+    # index.html names the hashed assets of one build; a cached copy after a rebuild points
+    # at files that no longer exist and the page is blank. Hashed assets may be cached.
+    index = re.search(r"location = /index\.html \{(.*?)\}", conf, re.S)
+    assert index
+    assert 'add_header Cache-Control "no-cache";' in index[1]
