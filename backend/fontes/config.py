@@ -1,6 +1,8 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Literal, Self
 
+from pydantic import SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,6 +41,20 @@ class Settings(BaseSettings):
     # Cosine similarity; chunks below it are not relevant enough to answer from.
     ask_min_score: float = 0.45
     question_max_chars: int = 2000
+    # "claude" sends the question and the retrieved excerpts to Anthropic's API; embeddings
+    # stay on Ollama either way.
+    llm_provider: Literal["ollama", "claude"] = "ollama"
+    anthropic_api_key: SecretStr | None = None
+    claude_model: str = "claude-opus-5-5"
+    claude_effort: Literal["low", "medium", "high", "xhigh", "max"] = "low"
+    claude_max_tokens: int = 8000
+
+    @model_validator(mode="after")
+    def _claude_has_a_key(self) -> Self:
+        key = self.anthropic_api_key
+        if self.llm_provider == "claude" and (key is None or not key.get_secret_value().strip()):
+            raise ValueError("LLM_PROVIDER=claude needs ANTHROPIC_API_KEY")
+        return self
 
 
 @lru_cache

@@ -120,6 +120,31 @@ Verification checks that each claim *points at* a source, not that the source sa
 
 Ask settings: `CHAT_MODEL` (`qwen2.5:7b`), `LLM_TIMEOUT_SECONDS` (300.0), `LLM_NUM_CTX` (8192: the model's context window, always sent, because Ollama's default would silently cut off the sources), `LLM_TEMPERATURE` (0.1), `LLM_MAX_TOKENS` (1024: the longest answer; a longer one ends with an `error` event saying it was cut off), `ASK_TOP_K` (6: how many chunks are given to the model), `QUESTION_MAX_CHARS` (2000), and `ASK_MIN_SCORE` (0.45). `ASK_MIN_SCORE` is a cosine similarity threshold and is worth tuning on your own documents: raise it if unrelated questions get answered, lower it if real questions come back `not_found`. Under Compose these settings are passed to the `api` service, so set them in the shell or in a `.env` file next to `docker-compose.yml`, for example `ASK_MIN_SCORE=0.35 docker compose up -d api`.
 
+## Switch to Claude
+
+Answers come from the local Ollama model by default. To answer with Claude instead, set two variables and recreate the `api` container:
+
+```bash
+export LLM_PROVIDER=claude ANTHROPIC_API_KEY=sk-ant-…
+docker compose up -d api
+```
+
+Or put both lines in a `.env` file next to `docker-compose.yml`. No code changes. Without a key the `api` refuses to start and says `LLM_PROVIDER=claude needs ANTHROPIC_API_KEY`.
+
+| Setting | Default | Meaning |
+|---|---|---|
+| `CLAUDE_MODEL` | `claude-opus-5-5` | The Claude model that writes the answer |
+| `CLAUDE_EFFORT` | `low` | How much the model thinks before answering: `low`, `medium`, `high`, `xhigh` or `max` |
+| `CLAUDE_MAX_TOKENS` | `8000` | The longest response, thinking included; a longer one ends with an `error` event saying it was cut off |
+
+`LLM_TIMEOUT_SECONDS` applies to Claude too. `CHAT_MODEL`, `LLM_NUM_CTX`, `LLM_TEMPERATURE` and `LLM_MAX_TOKENS` are Ollama settings and are ignored.
+
+- **Embeddings stay local.** Documents and questions are still embedded by `bge-m3` on Ollama, so switching back and forth needs no re-ingestion.
+- **What leaves your machine.** With Claude, the question and the retrieved excerpts (up to `ASK_TOP_K` chunks) are sent to Anthropic's API. Whole documents are not.
+- **History** records the `provider` and `model` of each answer, so answers from both providers can sit side by side.
+- **Refusals.** If the model declines a question, the API falls back server-side to another Claude model (`fallbacks: "default"`). If that one declines too, the answer ends with an `error` event.
+- **Errors** such as a wrong key (`HTTP 401`, naming `ANTHROPIC_API_KEY`) or an overloaded API (`HTTP 529`) end the answer with an `error` event that carries the status and Claude's message.
+
 ## Frontend
 
 The web UI in `frontend/` is a small React + TypeScript app built with Vite. It has three areas:

@@ -56,3 +56,15 @@ def test_frontend_index_is_revalidated() -> None:
     index = re.search(r"location = /index\.html \{(.*?)\}", conf, re.S)
     assert index
     assert 'add_header Cache-Control "no-cache";' in index[1]
+
+
+def test_api_passes_the_provider_settings() -> None:
+    api = _service("api")
+    for line in [
+        "LLM_PROVIDER: ${LLM_PROVIDER:-ollama}",
+        "ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}",
+        "CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-opus-5-5}",
+        "CLAUDE_EFFORT: ${CLAUDE_EFFORT:-low}",
+        "CLAUDE_MAX_TOKENS: ${CLAUDE_MAX_TOKENS:-8000}",
+    ]:
+        assert line in api, line

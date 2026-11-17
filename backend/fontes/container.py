@@ -7,6 +7,7 @@ from fastapi import FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from fontes.adapters.embeddings.ollama import OllamaEmbedder
+from fontes.adapters.llm.claude import ClaudeLLM
 from fontes.adapters.llm.ollama import OllamaLLM
 from fontes.adapters.loaders.html import parse_html
 from fontes.adapters.loaders.markdown import parse_markdown
@@ -49,18 +50,11 @@ def build_app(
     amqp = AmqpConnection(settings.rabbitmq_url, connect_timeout=settings.health_check_timeout / 2)
     # Only clients built here are ours to close; passed-in ones belong to the caller.
     own_embedder: OllamaEmbedder | None = None
-    own_llm: OllamaLLM | None = None
+    own_llm: OllamaLLM | ClaudeLLM | None = None
     if embedder is None:
         embedder = own_embedder = _embedder(settings)
     if llm is None:
-        llm = own_llm = OllamaLLM(
-            settings.ollama_url,
-            settings.chat_model,
-            num_ctx=settings.llm_num_ctx,
-            temperature=settings.llm_temperature,
-            max_tokens=settings.llm_max_tokens,
-            timeout=settings.llm_timeout_seconds,
-        )
+        llm = own_llm = build_llm(settings)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
@@ -141,6 +135,27 @@ def build_worker(
         await engine.dispose()
 
     return Worker(service, consumer, close)
+
+
+def build_llm(settings: Settings) -> OllamaLLM | ClaudeLLM:
+    if settings.llm_provider == "claude":
+        # Settings already refused a missing key.
+        assert settings.anthropic_api_key is not None
+        return ClaudeLLM(
+            settings.anthropic_api_key.get_secret_value(),
+            settings.claude_model,
+            settings.claude_effort,
+            settings.claude_max_tokens,
+            settings.llm_timeout_seconds,
+        )
+    return OllamaLLM(
+        settings.ollama_url,
+        settings.chat_model,
+        num_ctx=settings.llm_num_ctx,
+        temperature=settings.llm_temperature,
+        max_tokens=settings.llm_max_tokens,
+        timeout=settings.llm_timeout_seconds,
+    )
 
 
 def _pipeline(

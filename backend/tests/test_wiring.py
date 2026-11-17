@@ -4,8 +4,9 @@ import time
 
 from httpx import ASGITransport, AsyncClient
 
+from fontes.adapters.llm.claude import ClaudeLLM
 from fontes.config import Settings
-from fontes.container import build_app
+from fontes.container import build_app, build_llm
 
 # 10.255.255.1 is a non-routable address: packets are silently dropped, so connects hang.
 BLACK_HOLE = Settings(
@@ -29,3 +30,22 @@ async def test_app_starts_and_reports_hung_dependencies() -> None:
     assert set(checks) == {"database", "rabbitmq"}
     assert checks["database"] != "ok"
     assert "connect timed out" in checks["rabbitmq"]
+
+
+async def test_build_llm_picks_the_provider() -> None:
+    ollama = build_llm(Settings(_env_file=None))
+    claude = build_llm(
+        Settings(
+            _env_file=None,
+            llm_provider="claude",
+            anthropic_api_key="k",
+            claude_model="claude-sonnet-5-5",
+        )
+    )
+    try:
+        assert ollama.provider == "ollama"
+        assert isinstance(claude, ClaudeLLM)
+        assert claude.model == "claude-sonnet-5-5"
+    finally:
+        await ollama.aclose()
+        await claude.aclose()

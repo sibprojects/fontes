@@ -92,6 +92,12 @@ services:
       ASK_TOP_K: ${ASK_TOP_K:-6}
       ASK_MIN_SCORE: ${ASK_MIN_SCORE:-0.45}
       QUESTION_MAX_CHARS: ${QUESTION_MAX_CHARS:-2000}
+      # Chat provider (see README, "Switch to Claude"); embeddings stay on Ollama.
+      LLM_PROVIDER: ${LLM_PROVIDER:-ollama}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-opus-5-5}
+      CLAUDE_EFFORT: ${CLAUDE_EFFORT:-low}
+      CLAUDE_MAX_TOKENS: ${CLAUDE_MAX_TOKENS:-8000}
     ports:
       - "8000:8000"
     volumes:
