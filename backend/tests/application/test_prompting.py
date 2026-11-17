@@ -44,3 +44,12 @@ def test_system_demands_markers_per_paragraph() -> None:
     assert "[n]" in system
     assert "every paragraph" in system
     assert "language of the question" in system
+
+
+def test_unclear_language_falls_back_to_the_sources() -> None:
+    system = build_prompt("Q", []).system
+    assert "Answer in the language of the question." in system
+    assert (
+        "If the question has no clear language (only names, numbers or codes), "
+        "answer in the language of the sources." in system
+    )

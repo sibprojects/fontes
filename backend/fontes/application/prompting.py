@@ -14,7 +14,8 @@ Rules:
 - Use only the numbers of the sources listed below.
 - If the sources do not answer the question, say so plainly instead of guessing.
 - Answer in the language of the question.
-- Write plain paragraphs or lists. Do not use headings."""
+- If the question has no clear language (only names, numbers or codes), answer in the language of the sources.
+- Write plain paragraphs or lists. Do not use headings."""  # noqa: E501 (one rule per line)
 
 
 @dataclass(frozen=True)
