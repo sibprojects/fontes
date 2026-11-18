@@ -8,7 +8,26 @@ Fontes answers questions about your own documents, and every answer cites its so
 
 **Stack:** FastAPI · PostgreSQL + pgvector · RabbitMQ · Ollama (local LLM) or Claude · React
 
-🚧 Work in progress.
+![An answer with its cited source opened](docs/screenshots/ask.png)
+
+## Architecture
+
+```mermaid
+flowchart LR
+    browser([Browser]) --> nginx["nginx<br/>(React UI)"]
+    nginx -- "/api" --> api["api<br/>(FastAPI)"]
+    api --> pg[("Postgres<br/>+ pgvector")]
+    api -- "fontes.ingest" --> mq[["RabbitMQ"]]
+    mq --> worker["worker"]
+    worker --> pg
+    worker -- "embeddings" --> ollama["Ollama<br/>bge-m3 · qwen2.5"]
+    api -- "embeddings, chat" --> ollama
+    api -. "chat (LLM_PROVIDER=claude)" .-> claude["Claude API"]
+```
+
+**Ingest path.** An upload or URL is stored and recorded as `queued`, and its id is published to RabbitMQ. The worker picks it up, parses it (PDF, Markdown, HTML or a web page), splits it into chunks, embeds them with `bge-m3` on Ollama and stores the vectors in Postgres with pgvector. Failures are retried with a delay, then marked `failed` with the reason (see [How ingestion works](#how-ingestion-works)).
+
+**Ask path.** The api embeds the question, finds the closest chunks in pgvector and hands them to the chat model (Ollama, or Claude when configured) as numbered sources. The answer streams back to the browser over SSE. When it is complete, the api checks every `[n]` citation against the sources it gave, labels the answer and stores it in the history.
 
 ## Run locally
 
@@ -28,7 +47,7 @@ docker compose -f docker-compose.yml -f docker-compose.gpu.yml up --build
 
 `qwen2.5:7b` fits in 8 GB of video memory. On a GPU an answer takes a second or two; on CPU, about a minute.
 
-Then open **http://localhost:28080**: upload a document on the Documents tab, wait for it to be `ready`, and ask about it on the Ask tab.
+Then open **http://localhost:28080**: upload a document on the Documents tab, wait for it to be `ready`, and ask about it on the Ask tab. To try it without your own files, upload the fictional samples in [`docs/samples/`](docs/samples/): a kettle manual in English and garden-club rules in Russian.
 
 To check the API directly, run:
 
@@ -46,6 +65,16 @@ curl localhost:8000/health
 | Worker | no port: consumes the ingest queue (`docker compose logs -f worker`) |
 
 Database migrations run automatically: the one-shot `migrate` service applies them before `api` and `worker` start.
+
+## Screenshots
+
+![The Documents tab with two sample documents ready](docs/screenshots/documents.png)
+
+The Documents tab: uploads and URLs with their ingest status, refreshed while anything is still processing.
+
+![The Ask tab at phone width, with the history above the answer](docs/screenshots/history.png)
+
+At phone width the history sits above the answer; picking an entry shows the stored answer with its sources.
 
 ## API
 
@@ -240,6 +269,8 @@ npm test         # unit tests (Vitest)
 npm run lint     # lint (oxlint)
 npm run build    # type check and production build
 ```
+
+The README screenshots come from `npm run screenshots`. It drives the running Compose stack (or the URL given as its argument) with Playwright, uploads the samples from `docs/samples/` if they are missing, and writes `docs/screenshots/*.png`. Install the browser once with `npx playwright install chromium`.
 
 The integration tests need real Postgres and RabbitMQ. Start them first, then run the tests:
 
