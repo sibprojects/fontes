@@ -29,3 +29,15 @@ def test_claude_section_says_where_the_startup_error_is() -> None:
     section = text.split("## Switch to Claude", 1)[1].split("\n## ", 1)[0]
     assert "docker compose logs api" in section
     assert "is not downloaded" in section
+
+
+def test_readme_names_the_pgvector_version() -> None:
+    # hnsw.iterative_scan, which the search sets, needs pgvector 0.8.
+    assert "pgvector 0.8" in README.read_text(encoding="utf-8")
+
+
+def test_error_example_matches_httpx() -> None:
+    # httpx keeps the trailing slash of its base URL, so that is what the error says.
+    text = README.read_text(encoding="utf-8")
+    assert text.count("Cannot reach Ollama at http://ollama:11434/") == 2
+    assert "Cannot reach Ollama at http://ollama:11434`" not in text

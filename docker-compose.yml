@@ -48,14 +48,26 @@ services:
       timeout: 5s
       retries: 20
 
-  # One-shot: downloads the embedding model (bge-m3, about 1.2 GB) and the chat model
-  # (CHAT_MODEL, qwen2.5:7b by default, about 4.7 GB) on the first start; later starts find
-  # them in the volume and finish at once. The worker waits for it. With LLM_PROVIDER=claude
-  # the chat model is never used, so it is not downloaded.
+  # One-shot: downloads the embedding model (bge-m3, about 1.2 GB) on the first start; later
+  # starts find it in the volume and finish at once. The worker waits for it.
   ollama-pull:
     image: ollama/ollama
     entrypoint: ["sh", "-c"]
-    command: ['ollama pull bge-m3 && { [ "$${LLM_PROVIDER}" = claude ] || ollama pull $${CHAT_MODEL}; }']
+    command: ["ollama pull bge-m3"]
+    environment:
+      OLLAMA_HOST: ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+
+  # One-shot: downloads the chat model (CHAT_MODEL, qwen2.5:7b by default, about 4.7 GB).
+  # Nothing waits for it: documents ingest while it downloads, and asking before it is there
+  # gives an error that names the pull command. With LLM_PROVIDER=claude the chat model is
+  # never used, so it is not downloaded.
+  ollama-pull-chat:
+    image: ollama/ollama
+    entrypoint: ["sh", "-c"]
+    command: ['[ "$${LLM_PROVIDER}" = claude ] || ollama pull $${CHAT_MODEL}']
     environment:
       OLLAMA_HOST: ollama:11434
       CHAT_MODEL: ${CHAT_MODEL:-qwen2.5:7b}

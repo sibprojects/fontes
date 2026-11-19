@@ -105,6 +105,10 @@ jobs:
       - name: Build and start the stack
         run: docker compose up -d --build --wait api worker frontend
 
+      # Nothing waits for the chat model, so the stack is up before it is there.
+      - name: Pull the chat model
+        run: docker compose run --rm ollama-pull-chat
+
       - name: Smoke test
         run: scripts/smoke.sh
 

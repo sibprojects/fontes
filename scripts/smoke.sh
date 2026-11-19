@@ -63,8 +63,10 @@ if [[ "$status" != ready ]]; then
   exit 1
 fi
 
-# Ask about the random line. Any verdict will do (even not_found): this checks the wiring
-# (embed, search, stream from the chat model, verify, store), not the answer.
+# Ask about the random line. Any label but not_found will do: this checks the wiring
+# (embed, search, stream from the chat model, verify, store), not the answer. The question
+# names a line of the document just uploaded, so a working stack always finds it; not_found
+# would mean the chat model was never asked.
 question="What does the smoke test say about $line?"
 echo "asking: $question"
 answer="$(curl -fsS -N --max-time "$ASK_TIMEOUT_SECONDS" -H 'content-type: application/json' \
@@ -72,6 +74,10 @@ answer="$(curl -fsS -N --max-time "$ASK_TIMEOUT_SECONDS" -H 'content-type: appli
 echo "$answer"
 if [[ "$answer" == *'event: error'* || "$answer" != *'event: verdict'* ]]; then
   echo "asking did not end with a verdict" >&2
+  exit 1
+fi
+if [[ "$answer" == *'"label": "not_found"'* ]]; then
+  echo "the chat model was never asked (not_found)" >&2
   exit 1
 fi
 history="$(curl -fsS "$BASE/questions")"

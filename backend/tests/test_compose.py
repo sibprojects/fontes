@@ -71,7 +71,33 @@ def test_api_passes_the_provider_settings() -> None:
 
 
 def test_chat_model_is_not_pulled_for_claude() -> None:
-    # Under Claude the ~4.7 GB chat model is never used; the worker waits for this service.
-    pull = _service("ollama-pull")
+    # Under Claude the ~4.7 GB chat model is never used.
+    pull = _service("ollama-pull-chat")
     assert "LLM_PROVIDER: ${LLM_PROVIDER:-ollama}" in pull
     assert '[ "$${LLM_PROVIDER}" = claude ] || ollama pull $${CHAT_MODEL}' in pull
+
+
+def test_worker_waits_for_the_embedding_model_only() -> None:
+    # The worker needs bge-m3 only; the chat model keeps downloading while documents ingest.
+    pull = _service("ollama-pull")
+    assert "ollama pull bge-m3" in pull
+    assert "CHAT_MODEL" not in pull
+    worker = _service("worker")
+    assert re.search(r"^      ollama-pull:$", worker, re.M)
+    assert "ollama-pull-chat" not in worker
+    assert "ollama-pull-chat" not in _service("api")
+
+
+def test_ci_pulls_the_chat_model_before_the_smoke_test() -> None:
+    # Nothing depends on ollama-pull-chat, so `up ... api worker frontend` never starts it.
+    ci = (COMPOSE.parent / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    pull = ci.index("run: docker compose run --rm ollama-pull-chat")
+    assert ci.index("run: docker compose up -d --build --wait") < pull
+    assert pull < ci.index("run: scripts/smoke.sh")
+
+
+def test_smoke_fails_when_the_model_is_never_asked() -> None:
+    smoke = (COMPOSE.parent / "scripts" / "smoke.sh").read_text(encoding="utf-8")
+    lines = smoke.splitlines()
+    (i,) = [n for n, line in enumerate(lines) if '"label": "not_found"' in line]
+    assert "exit 1" in "\n".join(lines[i : i + 4])

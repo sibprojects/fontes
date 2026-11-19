@@ -37,7 +37,7 @@ You need Docker with Compose.
 docker compose up --build
 ```
 
-The first start downloads two models into the `ollama` volume, about 6 GB in total: the embedding model `bge-m3` (about 1.2 GB) and the chat model `qwen2.5:7b` (about 4.7 GB). That takes a while; the worker starts once they are there, and later starts reuse the volume. On a smaller machine pick a smaller chat model, for example `CHAT_MODEL=qwen2.5:3b docker compose up --build` (or `qwen2.5:1.5b`); answers get weaker as the model shrinks. Answering also needs memory for the model: about 6 GB for `qwen2.5:7b`.
+The first start downloads two models into the `ollama` volume, about 6 GB in total: the embedding model `bge-m3` (about 1.2 GB) and the chat model `qwen2.5:7b` (about 4.7 GB). That takes a while, and later starts reuse the volume. The worker starts as soon as `bge-m3` is there, so documents ingest while the chat model is still downloading; a question asked before it is there gets an error that names the pull command. On a smaller machine pick a smaller chat model, for example `CHAT_MODEL=qwen2.5:3b docker compose up --build` (or `qwen2.5:1.5b`); answers get weaker as the model shrinks. Answering also needs memory for the model: about 6 GB for `qwen2.5:7b`.
 
 With an NVIDIA GPU, add the GPU overlay so Ollama runs on it (Docker Desktop on Windows supports this out of the box; Linux needs the NVIDIA Container Toolkit):
 
@@ -122,7 +122,7 @@ data: {"question_id": "…", "label": "supported", "paragraphs": [{"text": "Run 
 
 - **`token`** events carry the answer as the model writes it. This text is provisional.
 - **`verdict`** comes once, at the end. It holds the verified answer, which is what is stored in the history. Show this one.
-- **`error`** (`{"detail": "..."}`) replaces the verdict if anything fails mid-way, for example `Cannot reach Ollama at http://ollama:11434`. A failed question is not stored.
+- **`error`** (`{"detail": "..."}`) replaces the verdict if anything fails mid-way, for example `Cannot reach Ollama at http://ollama:11434/: ...`. A failed question is not stored.
 
 A blank question, or one over 2000 characters, is rejected with `422` before any streaming. A request body over 64 KiB is refused with `413` before it is read in full.
 
@@ -212,7 +212,7 @@ flowchart LR
 
 - **Ack after the work.** A message is acked only after the document's new status is written, or after its retry or DLQ copy is confirmed by the broker. If the worker dies mid-way, RabbitMQ redelivers the message.
 - **Retries.** A transient failure (say, a service is unreachable) puts the document back to `queued` and sends the message to `fontes.ingest.retry`. After a fixed 5 s TTL it flows back into the main queue. Attempts are counted in Postgres; after 3 the document is `failed` with the error stored, and the message goes to the DLQ with the error in the `x-fontes-error` header.
-- **Permanent or transient.** A corrupt or password-protected PDF, a file with no extractable text, an unsupported content type or an HTTP 4xx from a URL is permanent: the document is `failed` at once. Ollama or Postgres being unreachable, a network error, or an HTTP 408, 429 or 5xx is transient and retried; the stored error says which service failed (for example `Cannot reach Ollama at http://ollama:11434`).
+- **Permanent or transient.** A corrupt or password-protected PDF, a file with no extractable text, an unsupported content type or an HTTP 4xx from a URL is permanent: the document is `failed` at once. Ollama or Postgres being unreachable, a network error, or an HTTP 408, 429 or 5xx is transient and retried; the stored error says which service failed (for example `Cannot reach Ollama at http://ollama:11434/: ...`).
 - **No loops.** A permanent failure (a corrupt file) goes to the DLQ at once. A message that cannot be decoded (not JSON, or nested too deeply to parse) goes straight to the DLQ. If the handler raises unexpectedly (say, Postgres is down), the message is retried with a crash count in the `x-fontes-crashes` header and goes to the DLQ on the 4th crash. If the worker process dies outright, RabbitMQ redelivers the message; every delivery counts as an attempt, and once 3 are used up the next delivery marks the document `failed` ("Gave up after 3 attempts") without processing it again.
 - **Idempotent.** A redelivered or duplicate message for a `ready` or `failed` document does nothing; one for a deleted document is dropped.
 - **Broker down or stalled at upload time.** The upload still succeeds (publishing gives up after 3 s) and the document stays `queued`.
@@ -272,6 +272,8 @@ npm run build    # type check and production build
 ```
 
 The README screenshots come from `npm run screenshots`. It drives the running Compose stack (or the URL given as its argument) with Playwright, uploads the samples from `docs/samples/` if they are missing, and writes `docs/screenshots/*.png`. It refuses to run if the stack holds any other document or any question, so your own files never end up in the screenshots. Install the browser once with `npx playwright install chromium`.
+
+If you bring your own Postgres instead of the Compose one, it needs pgvector 0.8 or later: the search sets `hnsw.iterative_scan`. The Compose image `pgvector/pgvector:pg17` has it.
 
 The integration tests need real Postgres and RabbitMQ. Start them first, then run the tests:
 
