@@ -7,6 +7,9 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 MULTIPART_OVERHEAD_BYTES = 64 * 1024
 """Slack for multipart boundaries and part headers on top of the file-size limit."""
 
+ASK_BODY_MAX_BYTES = 64 * 1024
+"""Far above QUESTION_MAX_CHARS of UTF-8 JSON; a bigger body is refused before parsing."""
+
 
 class BodySizeLimit:
     """Answer 413 as soon as a POST to `path` declares or streams more than `max_bytes`."""

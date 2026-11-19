@@ -124,7 +124,7 @@ data: {"question_id": "…", "label": "supported", "paragraphs": [{"text": "Run 
 - **`verdict`** comes once, at the end. It holds the verified answer, which is what is stored in the history. Show this one.
 - **`error`** (`{"detail": "..."}`) replaces the verdict if anything fails mid-way, for example `Cannot reach Ollama at http://ollama:11434`. A failed question is not stored.
 
-A blank question, or one over 2000 characters, is rejected with `422` before any streaming.
+A blank question, or one over 2000 characters, is rejected with `422` before any streaming. A request body over 64 KiB is refused with `413` before it is read in full.
 
 **How verification works.** The model is told to put a source marker such as `[1]` or `[2][3]` in every paragraph and list item. After the answer is complete, Fontes splits it into paragraphs (blank-line separated) and list items, and checks each marker:
 

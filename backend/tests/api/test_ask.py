@@ -143,6 +143,24 @@ async def test_too_long_question_is_422(c: AsyncClient) -> None:
     assert "2000" in r.json()["detail"]
 
 
+async def test_ask_body_over_the_limit_is_413(c: AsyncClient) -> None:
+    r = await c.post("/ask", json={"question": "x" * 70_000})
+    assert r.status_code == 413
+    assert "65536-byte limit" in r.json()["detail"]
+
+
+async def test_ask_body_streamed_over_the_limit_is_413(c: AsyncClient) -> None:
+    # No content-length: the limit must hold while the body is still arriving.
+    async def chunks() -> AsyncIterator[bytes]:
+        yield b'{"question": "'
+        for _ in range(10):
+            yield b"x" * 8 * 1024
+        yield b'"}'
+
+    r = await c.post("/ask", content=chunks(), headers={"content-type": "application/json"})
+    assert r.status_code == 413
+
+
 async def test_question_at_limit_is_accepted(c: AsyncClient) -> None:
     assert (await _ask(c, "x" * 2000))[-1][0] == "verdict"
 

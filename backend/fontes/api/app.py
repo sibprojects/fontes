@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse
 from fontes.api import health
 from fontes.api.ask import router as ask_router
 from fontes.api.documents import router as documents_router
-from fontes.api.limits import MULTIPART_OVERHEAD_BYTES, BodySizeLimit
+from fontes.api.limits import ASK_BODY_MAX_BYTES, MULTIPART_OVERHEAD_BYTES, BodySizeLimit
 from fontes.application.asking import AskService, QuestionNotFoundError
 from fontes.application.documents import (
     DocumentNotFoundError,
@@ -62,6 +62,7 @@ def create_app(
         path="/documents",
         max_bytes=max_upload_bytes + MULTIPART_OVERHEAD_BYTES,
     )
+    app.add_middleware(BodySizeLimit, path="/ask", max_bytes=ASK_BODY_MAX_BYTES)
     app.include_router(health.router)
     app.include_router(documents_router)
     app.include_router(ask_router)
