@@ -158,7 +158,7 @@ export LLM_PROVIDER=claude ANTHROPIC_API_KEY=sk-ant-…
 docker compose up -d api
 ```
 
-Or put both lines in a `.env` file next to `docker-compose.yml`. No code changes. Without a key the `api` refuses to start and says `LLM_PROVIDER=claude needs ANTHROPIC_API_KEY`.
+Or put both lines in a `.env` file next to `docker-compose.yml`. No code changes. Without a key the `api` refuses to start: Compose keeps restarting it and the UI gets `502` errors. The reason, `LLM_PROVIDER=claude needs ANTHROPIC_API_KEY`, is in `docker compose logs api`.
 
 | Setting | Default | Meaning |
 |---|---|---|
@@ -168,7 +168,7 @@ Or put both lines in a `.env` file next to `docker-compose.yml`. No code changes
 
 `LLM_TIMEOUT_SECONDS` applies to Claude too. `CHAT_MODEL`, `LLM_NUM_CTX`, `LLM_TEMPERATURE` and `LLM_MAX_TOKENS` are Ollama settings and are ignored.
 
-- **Embeddings stay local.** Documents and questions are still embedded by `bge-m3` on Ollama, so switching back and forth needs no re-ingestion.
+- **Embeddings stay local.** Documents and questions are still embedded by `bge-m3` on Ollama, so switching back and forth needs no re-ingestion. The Ollama chat model (`CHAT_MODEL`) is not downloaded while `LLM_PROVIDER=claude`; it is pulled on the first start after you switch back.
 - **What leaves your machine.** With Claude, the question and the retrieved excerpts (up to `ASK_TOP_K` chunks) are sent to Anthropic's API. Whole documents are not.
 - **History** records the `provider` and `model` of each answer, so answers from both providers can sit side by side.
 - **Refusals.** If the model declines a question, the API falls back server-side to another Claude model (`fallbacks: "default"`). If that one declines too, the answer ends with an `error` event.

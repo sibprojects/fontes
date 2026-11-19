@@ -68,3 +68,10 @@ def test_api_passes_the_provider_settings() -> None:
         "CLAUDE_MAX_TOKENS: ${CLAUDE_MAX_TOKENS:-8000}",
     ]:
         assert line in api, line
+
+
+def test_chat_model_is_not_pulled_for_claude() -> None:
+    # Under Claude the ~4.7 GB chat model is never used; the worker waits for this service.
+    pull = _service("ollama-pull")
+    assert "LLM_PROVIDER: ${LLM_PROVIDER:-ollama}" in pull
+    assert '[ "$${LLM_PROVIDER}" = claude ] || ollama pull $${CHAT_MODEL}' in pull
