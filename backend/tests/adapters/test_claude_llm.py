@@ -158,8 +158,10 @@ async def test_status_error_carries_status_and_message() -> None:
 async def test_error_event_mid_stream() -> None:
     error: Event = {"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}}
     body = _sse(_start(), *_text_block(0, "Partial")[:2], error)
-    with pytest.raises(RuntimeError, match="Overloaded"):
+    with pytest.raises(RuntimeError) as caught:
         await _collect(_llm(_ok(body)))
+    # The SDK builds this error from the 200 stream response; "HTTP 200" would read as success.
+    assert str(caught.value) == "The Claude API failed mid-answer: Overloaded"
 
 
 async def test_refusal_is_an_error() -> None:

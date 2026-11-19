@@ -78,12 +78,15 @@ class ClaudeLLM:
                 f"The Claude API rejected ANTHROPIC_API_KEY (HTTP 401): {_message(exc)}"
             ) from exc
         except anthropic.APIStatusError as exc:
+            if exc.status_code < 400:
+                # An `error` event inside a 200 stream (say, overloaded mid-answer): the SDK
+                # raises it with the stream's status, and "HTTP 200" would read as success.
+                raise RuntimeError(f"The Claude API failed mid-answer: {_message(exc)}") from exc
             raise RuntimeError(
                 f"The Claude API returned HTTP {exc.status_code}: {_message(exc)}"
             ) from exc
         except anthropic.APIError as exc:
-            # An `error` event inside a 200 stream (say, overloaded mid-answer).
-            raise RuntimeError(f"The Claude API failed mid-answer: {_message(exc)}") from exc
+            raise RuntimeError(f"The Claude API failed: {_message(exc)}") from exc
 
         if final.stop_reason == "refusal":
             category = final.stop_details.category if final.stop_details else None

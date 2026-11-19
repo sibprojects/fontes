@@ -1,9 +1,11 @@
 // Takes the README screenshots against a running stack (default: the compose UI on :28080).
-// It uploads the fictional documents in docs/samples/ if they are missing, so the shots
-// never show anyone's own files. One-time setup: `npx playwright install chromium`.
+// It needs a stack holding nothing but the fictional documents in docs/samples/ (it uploads
+// them if missing) and an empty history; otherwise it stops before taking any shot, so
+// nobody's own files reach the repository. One-time setup: `npx playwright install chromium`.
 import { readdir, readFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { chromium } from 'playwright'
+import { foreignContent } from './stack-check.mjs'
 
 const BASE = process.argv[2] ?? 'http://localhost:28080'
 const ROOT = resolve(import.meta.dirname, '..', '..')
@@ -18,9 +20,25 @@ async function api(path, init) {
   return response.json()
 }
 
+async function sampleNames() {
+  return (await readdir(SAMPLES)).filter((n) => n.endsWith('.md'))
+}
+
+async function refuseForeignContent() {
+  const found = foreignContent(await api('/documents'), await api('/questions'), await sampleNames())
+  if (found.length > 0) {
+    console.error(`The stack holds more than the samples, and it would show in the screenshots:`)
+    for (const line of found) console.error(`  - ${line}`)
+    console.error('Delete those documents on the Documents tab and clear the history with')
+    console.error('  docker compose exec postgres psql -U fontes -c "TRUNCATE questions"')
+    console.error('then run this again.')
+    process.exit(1)
+  }
+}
+
 async function uploadMissingSamples() {
   const titles = new Set((await api('/documents')).map((d) => d.title))
-  for (const name of (await readdir(SAMPLES)).filter((n) => n.endsWith('.md'))) {
+  for (const name of await sampleNames()) {
     if (titles.has(name)) continue
     const form = new FormData()
     const bytes = await readFile(join(SAMPLES, name))
@@ -43,6 +61,7 @@ async function waitUntilReady() {
   }
 }
 
+await refuseForeignContent()
 await uploadMissingSamples()
 await waitUntilReady()
 

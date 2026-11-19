@@ -270,7 +270,7 @@ npm run lint     # lint (oxlint)
 npm run build    # type check and production build
 ```
 
-The README screenshots come from `npm run screenshots`. It drives the running Compose stack (or the URL given as its argument) with Playwright, uploads the samples from `docs/samples/` if they are missing, and writes `docs/screenshots/*.png`. Install the browser once with `npx playwright install chromium`.
+The README screenshots come from `npm run screenshots`. It drives the running Compose stack (or the URL given as its argument) with Playwright, uploads the samples from `docs/samples/` if they are missing, and writes `docs/screenshots/*.png`. It refuses to run if the stack holds any other document or any question, so your own files never end up in the screenshots. Install the browser once with `npx playwright install chromium`.
 
 The integration tests need real Postgres and RabbitMQ. Start them first, then run the tests:
 
