@@ -2,7 +2,7 @@
 // It needs a stack holding nothing but the fictional documents in docs/samples/ (it uploads
 // them if missing) and an empty history; otherwise it stops before taking any shot, so
 // nobody's own files reach the repository. One-time setup: `npx playwright install chromium`.
-import { readdir, readFile } from 'node:fs/promises'
+import { readdir, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { chromium } from 'playwright'
 import { foreignContent } from './stack-check.mjs'
@@ -65,25 +65,40 @@ await refuseForeignContent()
 await uploadMissingSamples()
 await waitUntilReady()
 
-const browser = await chromium.launch()
-try {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } })
+// Shots stay in memory until all three are taken, so a failed run leaves the committed set
+// untouched rather than half replaced.
+async function takeShots(page) {
+  const shots = {}
   await page.goto(BASE)
   await page.getByRole('cell', { name: 'lumen-kettle.md' }).waitFor()
-  await page.screenshot({ path: join(OUT, 'documents.png') })
+  shots['documents.png'] = await page.screenshot()
 
   await page.getByRole('button', { name: 'Ask', exact: true }).first().click()
   await page.getByLabel('Question').fill(QUESTION)
   await page.locator('form.ask-form button[type=submit]').click()
   await page.locator('.label-verifying').waitFor()
   await page.locator('.label-verifying').waitFor({ state: 'detached', timeout: 300_000 })
+  const failed = page.locator('section.ask [role=alert]')
+  if (await failed.count()) {
+    throw new Error(`the question failed, so there is no answer to show: ${await failed.first().innerText()}`)
+  }
   await page.locator('article.answer details summary').first().click()
-  await page.screenshot({ path: join(OUT, 'ask.png') })
+  shots['ask.png'] = await page.screenshot()
 
   await page.setViewportSize({ width: 390, height: 844 })
   await page.getByRole('navigation', { name: 'History' }).getByRole('button').first().click()
-  await page.screenshot({ path: join(OUT, 'history.png') })
+  shots['history.png'] = await page.screenshot()
+  return shots
+}
+
+const browser = await chromium.launch()
+try {
+  const shots = await takeShots(await browser.newPage({ viewport: { width: 1280, height: 800 } }))
+  for (const [name, png] of Object.entries(shots)) await writeFile(join(OUT, name), png)
+  console.log(`saved ${Object.keys(shots).join(', ')} in ${OUT}`)
+} catch (error) {
+  console.error(`No screenshots saved: ${error.message}`)
+  process.exitCode = 1
 } finally {
   await browser.close()
 }
-console.log(`saved documents.png, ask.png and history.png in ${OUT}`)
