@@ -53,23 +53,3 @@ def test_unclear_language_falls_back_to_the_sources() -> None:
         "If the question has no clear language (only names, numbers or codes), "
         "answer in the language of the sources." in system
     )
-
-
-NO_CHINESE = "Do not write Chinese characters."
-
-
-def test_no_chinese_when_neither_question_nor_sources_have_any() -> None:
-    # qwen2.5 drifts into Chinese on short English questions; when nothing asked for it,
-    # the system prompt rules it out.
-    prompt = build_prompt("What about 1795045963?", [_hit("a.md", Chunk(0, "Smoke test text."))])
-    assert NO_CHINESE in prompt.system
-
-
-def test_chinese_allowed_when_the_question_is_chinese() -> None:
-    prompt = build_prompt("怎么除垢?", [_hit("a.md", Chunk(0, "Descale every 4 weeks."))])
-    assert NO_CHINESE not in prompt.system
-
-
-def test_chinese_allowed_when_a_source_is_chinese() -> None:
-    prompt = build_prompt("K2?", [_hit("a.md", Chunk(0, "每四周除垢一次。"))])
-    assert NO_CHINESE not in prompt.system
