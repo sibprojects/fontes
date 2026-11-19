@@ -55,7 +55,12 @@ class OllamaLLM:
                 async for line in response.aiter_lines():
                     if not line.strip():
                         continue
-                    data: Any = json.loads(line)
+                    try:
+                        data: Any = json.loads(line)
+                    except json.JSONDecodeError as exc:
+                        raise RuntimeError(
+                            f"Ollama sent an unreadable line: {line[:200]!r}"
+                        ) from exc
                     if "error" in data:
                         raise RuntimeError(f"Ollama: {data['error']}")
                     content = data.get("message", {}).get("content", "")
@@ -80,7 +85,8 @@ class OllamaLLM:
         if response.status_code == 404 and "not found" in error:
             return RuntimeError(
                 f"Chat model {self._model!r} is not available in Ollama; "
-                f"run `ollama pull {self._model}`"
+                f"run `ollama pull {self._model}` "
+                f"(under Compose: `docker compose exec ollama ollama pull {self._model}`)"
             )
         return RuntimeError(f"Ollama returned HTTP {response.status_code}: {error}")
 

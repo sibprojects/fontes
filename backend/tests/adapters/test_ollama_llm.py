@@ -73,8 +73,19 @@ async def test_blank_lines_are_skipped() -> None:
 async def test_model_missing_raises_clear_error() -> None:
     error = {"error": 'model "qwen2.5:7b" not found, try pulling it first'}
     llm = _llm(lambda _: httpx.Response(404, json=error))
-    with pytest.raises(RuntimeError, match="ollama pull qwen2.5:7b"):
+    with pytest.raises(RuntimeError, match="ollama pull qwen2.5:7b") as caught:
         await _collect(llm)
+    assert "`docker compose exec ollama ollama pull qwen2.5:7b`" in str(caught.value)
+
+
+async def test_unreadable_line_names_ollama() -> None:
+    body = b'{"message": {"content": "a"}}\nnot json\n'
+    llm = _llm(lambda _: httpx.Response(200, content=body))
+    with pytest.raises(
+        RuntimeError, match="^Ollama sent an unreadable line: 'not json'$"
+    ) as caught:
+        await _collect(llm)
+    assert isinstance(caught.value.__cause__, json.JSONDecodeError)
 
 
 async def test_other_http_error_names_status() -> None:
