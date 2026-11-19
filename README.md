@@ -133,6 +133,7 @@ A blank question, or one over 2000 characters, is rejected with `422` before any
 - **Paragraphs.** A paragraph is `supported` if at least one valid marker is left in it.
 - **Code.** Brackets inside code (`` `arr[0]` `` or a fenced block) and indexes such as `a[2]` are not markers: they are left as they are and never count as citations. A fenced block is one paragraph even with blank lines inside.
 - **Fullwidth markers** such as `【1】` count too and are rewritten as `[1]`.
+- **Lead-in lines.** A line ending in `:` right before a list ("Here is how:") counts as supported if the list cites a source.
 
 | Label | Meaning |
 |---|---|

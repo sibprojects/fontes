@@ -155,3 +155,24 @@ def test_fullwidth_markers_count_and_are_normalized() -> None:
     (paragraph,) = verify("A 【1】 and B［2］ and C [３，1].", 3).paragraphs
     assert paragraph.text == "A [1] and B[2] and C [3][1]."
     assert paragraph.citations == (1, 2, 3)
+
+
+def test_lead_in_takes_the_citations_of_its_list() -> None:
+    result = verify("Here is how:\n\n- Fill it [1].\n- Boil it [2].", 2)
+    assert result.label == AnswerLabel.SUPPORTED
+    lead_in = result.paragraphs[0]
+    assert lead_in.text == "Here is how:"
+    assert lead_in.citations == (1, 2)
+    # The same holds when the list starts on the very next line.
+    assert verify("Here is how:\n- Fill it [1].", 2).paragraphs[0].citations == (1,)
+
+
+def test_lead_in_without_cited_items_stays_unsupported() -> None:
+    result = verify("Steps:\n\n- Fill it.\n- Boil it [1].", 2)
+    assert [p.citations for p in result.paragraphs] == [(1,), (), (1,)]
+    assert result.label == AnswerLabel.PARTIALLY_SUPPORTED
+    assert _supported("Steps:\n\n- Fill it.\n- Boil it.") == [False, False, False]
+
+
+def test_colon_not_followed_by_a_list_is_not_a_lead_in() -> None:
+    assert _supported("Note:\n\nPlain text [1].") == [False, True]

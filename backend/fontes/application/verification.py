@@ -1,5 +1,6 @@
 """Citation verification: is every paragraph of an answer backed by a real source?"""
 
+import itertools
 import re
 from dataclasses import dataclass
 
@@ -32,12 +33,14 @@ def verify(text: str, source_count: int) -> Verification:
     one valid marker. An answer with no paragraphs at all is unsupported. Brackets inside code
     (inline or fenced) and indexes such as `a[2]` are left alone: they are not markers.
     Fullwidth markers such as `【1】` count too and are rewritten as `[1]`.
+    A lead-in line ending in `:` right before a list takes the citations of that list.
     """
-    paragraphs = tuple(
-        paragraph
-        for raw in _split(text.replace("\r\n", "\n"))
+    cleaned = [
+        (paragraph, is_item)
+        for raw, is_item in _split(text.replace("\r\n", "\n"))
         if (paragraph := _clean(raw, source_count)).text
-    )
+    ]
+    paragraphs = _lend_to_lead_ins(cleaned)
     supported = [p.supported for p in paragraphs]
     if supported and all(supported):
         label = AnswerLabel.SUPPORTED
@@ -48,13 +51,27 @@ def verify(text: str, source_count: int) -> Verification:
     return Verification("\n\n".join(p.text for p in paragraphs), paragraphs, label)
 
 
-def _split(text: str) -> list[str]:
+def _lend_to_lead_ins(cleaned: list[tuple[Paragraph, bool]]) -> tuple[Paragraph, ...]:
+    """A paragraph that is not a list item, cites nothing and ends with `:` ("Here is how:")
+    introduces the list right after it, and takes the citations of that run of items."""
+    result: list[Paragraph] = []
+    for i, (paragraph, is_item) in enumerate(cleaned):
+        if not is_item and not paragraph.citations and paragraph.text.endswith(":"):
+            cited: list[int] = []
+            for item, _ in itertools.takewhile(lambda p: p[1], cleaned[i + 1 :]):
+                cited.extend(n for n in item.citations if n not in cited)
+            paragraph = Paragraph(paragraph.text, tuple(cited))
+        result.append(paragraph)
+    return tuple(result)
+
+
+def _split(text: str) -> list[tuple[str, bool]]:
     """Blocks are separated by blank lines; inside a block, each list item stands alone.
 
     A fenced code block belongs to the paragraph it starts in: blank lines and list-like
-    lines inside it split nothing.
+    lines inside it split nothing. Each paragraph comes with whether it is a list item.
     """
-    paragraphs: list[str] = []
+    paragraphs: list[tuple[str, bool]] = []
     current: list[str] = []
     in_fence = False
     for line in text.split("\n"):
@@ -63,16 +80,21 @@ def _split(text: str) -> list[str]:
         elif not in_fence:
             if not line.strip():
                 if current:
-                    paragraphs.append("\n".join(current))
+                    paragraphs.append(_block(current))
                     current = []
                 continue
             if _LIST_ITEM.match(line) and current:
-                paragraphs.append("\n".join(current))
+                paragraphs.append(_block(current))
                 current = []
         current.append(line)
     if current:
-        paragraphs.append("\n".join(current))
+        paragraphs.append(_block(current))
     return paragraphs
+
+
+def _block(lines: list[str]) -> tuple[str, bool]:
+    # A paragraph is a list item when it starts with a marker; a fence line never does.
+    return "\n".join(lines), bool(_LIST_ITEM.match(lines[0]))
 
 
 def _clean(raw: str, source_count: int) -> Paragraph:
