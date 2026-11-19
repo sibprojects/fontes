@@ -117,7 +117,7 @@ def test_piece_inside_a_later_section_cites_that_section() -> None:
         Segment("Install\n" + _text(4000), section="Install"),
     ]
     sections = [c.section for c in _chunker().split(segments)]
-    assert sections[0] == "Title"
+    assert sections[0] == "Title · Install"
     assert len(sections) > 2 and set(sections[1:]) == {"Install"}
 
 
@@ -145,3 +145,21 @@ def test_no_tiny_chunk_after_early_sentence_end() -> None:
 def test_space_cut_must_be_past_half_window() -> None:
     chunks = Chunker(100, 10, 50).split([Segment("ab " + "x" * 300)])
     assert len(chunks[0].text) == 100
+
+
+def test_merged_short_sections_are_all_named() -> None:
+    # Two short sections share one chunk; an answer drawn from the second must not be
+    # cited by the first heading alone.
+    segments = [
+        Segment("Keep-warm holds the temperature.", section="Keep warm"),
+        Segment("Descale every 4 weeks.", section="Descaling"),
+        Segment("More about descaling.", section="Descaling"),
+    ]
+    assert [c.section for c in _chunker().split(segments)] == ["Keep warm · Descaling"]
+
+
+def test_label_of_many_merged_sections_is_capped() -> None:
+    segments = [Segment("x", section=f"Section number {n}") for n in range(40)]
+    (chunk,) = _chunker().split(segments)
+    assert chunk.section is not None and len(chunk.section) <= 200
+    assert chunk.section.startswith("Section number 0 · Section number 1 · ")

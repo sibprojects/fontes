@@ -11,6 +11,7 @@ _BLANK_LINES = re.compile(r"\n{3,}")
 _SENTENCE_ENDS = (". ", "! ", "? ")
 _SEPARATOR = "\n\n"
 MAX_SECTION_CHARS = 200
+SECTION_JOINER = " · "
 
 
 def _normalize(text: str) -> str:
@@ -24,10 +25,19 @@ def _normalize_section(section: str | None) -> str | None:
     """One line, bounded: a heading is a citation label, not content."""
     if section is None:
         return None
-    title = " ".join(_normalize(section).split())
-    if len(title) > MAX_SECTION_CHARS:
-        title = title[: MAX_SECTION_CHARS - 1].rstrip() + "…"
-    return title or None
+    return _cap(" ".join(_normalize(section).split())) or None
+
+
+def _cap(label: str) -> str:
+    if len(label) > MAX_SECTION_CHARS:
+        return label[: MAX_SECTION_CHARS - 1].rstrip() + "…"
+    return label
+
+
+def _label(spans: Sequence["_Span"]) -> str | None:
+    """Every heading the piece covers, in order: short sections merged into one chunk."""
+    sections = list(dict.fromkeys(s.section for s in spans if s.section is not None))
+    return _cap(SECTION_JOINER.join(sections)) if sections else None
 
 
 @dataclass(frozen=True)
@@ -97,8 +107,7 @@ class Chunker:
             pages = [s.page for s in overlapped if s.page is not None]
             piece = text[start:cut].strip()
             if piece:
-                # Cite the section the piece starts in: its nearest preceding heading.
-                section = overlapped[0].section if overlapped else group[0].section
+                section = _label(overlapped) if overlapped else group[0].section
                 pieces.append((piece, min(pages, default=None), max(pages, default=None), section))
             if cut == len(text):
                 break
