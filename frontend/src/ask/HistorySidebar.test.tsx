@@ -1,9 +1,9 @@
-import { render, screen } from '@testing-library/react'
+import { act, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError, listQuestions } from '../api/client'
 import type { QuestionSummaryOut } from '../api/types'
-import { HistorySidebar } from './HistorySidebar'
+import { HISTORY_RETRY_MS, HistorySidebar } from './HistorySidebar'
 
 vi.mock('../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api/client')>()),
@@ -62,6 +62,20 @@ describe('HistorySidebar', () => {
     list.mockResolvedValue([])
     render(<HistorySidebar refreshKey={0} selectedId={null} onSelect={() => {}} />)
     expect(await screen.findByText('No questions yet.')).toBeInTheDocument()
+  })
+
+  it('retries a failed fetch', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      list.mockRejectedValueOnce(new ApiError(502, 'HTTP 502')).mockResolvedValue([questions[0]])
+      render(<HistorySidebar refreshKey={0} selectedId={null} onSelect={() => {}} />)
+      expect(await screen.findByRole('alert')).toHaveTextContent('HTTP 502')
+      await act(() => vi.advanceTimersByTimeAsync(HISTORY_RETRY_MS))
+      expect(await screen.findByText('Newest question?')).toBeInTheDocument()
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('shows a failed fetch', async () => {

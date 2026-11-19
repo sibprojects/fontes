@@ -10,25 +10,36 @@ type Props = {
   onSelect: (id: string) => void
 }
 
+/** After a failed fetch (say, the api is restarting), the list is fetched again this often. */
+export const HISTORY_RETRY_MS = 2000
+
 /** Past questions, newest first (the API's order). */
 export function HistorySidebar({ refreshKey, selectedId, onSelect }: Props) {
   const [questions, setQuestions] = useState<QuestionSummaryOut[] | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Bumped by the retry timer; a new fetch also re-arms the timer if it fails again.
+  const [retry, setRetry] = useState(0)
 
   useEffect(() => {
     let current = true
+    let timer: ReturnType<typeof setTimeout> | undefined
     listQuestions().then(
       (fetched) => {
         if (!current) return
         setQuestions(fetched)
         setError(null)
       },
-      (e: unknown) => current && setError(errorText(e)),
+      (e: unknown) => {
+        if (!current) return
+        setError(errorText(e))
+        timer = setTimeout(() => setRetry((n) => n + 1), HISTORY_RETRY_MS)
+      },
     )
     return () => {
       current = false
+      clearTimeout(timer)
     }
-  }, [refreshKey])
+  }, [refreshKey, retry])
 
   return (
     <nav className="history" aria-label="History">

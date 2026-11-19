@@ -18,12 +18,14 @@ type View =
 type Props = {
   /** A past question to show from the history; null shows the current one. */
   historyId?: string | null
+  /** Changes on every click in the history, so the same entry clicked again is reloaded. */
+  historyLoad?: number
   /** Called when a new question is sent, so the parent can clear the history selection. */
   onAsk?: () => void
   onAnswered?: (questionId: string) => void
 }
 
-export function AskPage({ historyId = null, onAsk, onAnswered }: Props) {
+export function AskPage({ historyId = null, historyLoad = 0, onAsk, onAnswered }: Props) {
   const [question, setQuestion] = useState('')
   const [view, setView] = useState<View>({ kind: 'idle' })
   const controller = useRef<AbortController | null>(null)
@@ -54,7 +56,7 @@ export function AskPage({ historyId = null, onAsk, onAnswered }: Props) {
     return () => {
       current = false
     }
-  }, [historyId])
+  }, [historyId, historyLoad])
 
   const streaming = view.kind === 'streaming'
 
