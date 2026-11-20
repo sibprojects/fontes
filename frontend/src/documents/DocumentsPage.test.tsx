@@ -140,6 +140,48 @@ describe('DocumentsPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent("Unsupported file type '.txt'")
   })
 
+  it('keeps the chosen file when the upload fails', async () => {
+    list.mockResolvedValue([])
+    vi.mocked(uploadDocument).mockRejectedValueOnce(new ApiError(415, 'Unsupported file type')).mockResolvedValue(doc({}))
+    const user = setup()
+    const file = new File(['# Guide'], 'guide.md', { type: 'text/markdown' })
+    await user.upload(screen.getByLabelText('File'), file)
+    await user.click(screen.getByRole('button', { name: 'Upload' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Unsupported file type')
+    const upload = screen.getByRole('button', { name: 'Upload' })
+    expect(upload).toBeEnabled()
+    await user.click(upload)
+    expect(uploadDocument).toHaveBeenCalledTimes(2)
+    expect(uploadDocument).toHaveBeenLastCalledWith(file)
+  })
+
+  it('keeps the URL when adding it fails', async () => {
+    list.mockResolvedValue([])
+    vi.mocked(addUrl).mockRejectedValue(new ApiError(422, 'Not a URL'))
+    const user = setup()
+    await user.type(screen.getByLabelText('URL'), 'https://example.com')
+    await user.click(screen.getByRole('button', { name: 'Add URL' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('Not a URL')
+    expect(screen.getByLabelText('URL')).toHaveValue('https://example.com')
+  })
+
+  it('sends one upload for a double click', async () => {
+    list.mockResolvedValue([])
+    let finish!: () => void
+    vi.mocked(uploadDocument).mockImplementation(
+      () => new Promise((resolve) => (finish = () => resolve(doc({})))),
+    )
+    const user = setup()
+    await user.upload(screen.getByLabelText('File'), new File(['# Guide'], 'guide.md'))
+    await user.type(screen.getByLabelText('URL'), 'https://example.com')
+    await user.dblClick(screen.getByRole('button', { name: 'Upload' }))
+    expect(uploadDocument).toHaveBeenCalledTimes(1)
+    expect(screen.getByRole('button', { name: 'Upload' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add URL' })).toBeDisabled()
+    await act(async () => finish())
+    expect(screen.getByRole('button', { name: 'Add URL' })).toBeEnabled()
+  })
+
   it('shows a failed list fetch', async () => {
     list.mockRejectedValue(new ApiError(502, 'HTTP 502'))
     setup()
