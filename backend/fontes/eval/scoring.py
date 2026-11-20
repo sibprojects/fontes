@@ -69,6 +69,7 @@ def normalize(text: str) -> str:
 
 
 def score(case: Case, outcome: Outcome) -> CaseResult:
+    names: tuple[str, ...]
     if case.document is None:
         names = OFF_TOPIC_CHECKS
         checks = {"not_found": outcome.label == "not_found"}
