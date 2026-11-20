@@ -49,3 +49,11 @@ def test_error_example_matches_httpx() -> None:
     text = README.read_text(encoding="utf-8")
     assert text.count("Cannot reach Ollama at http://ollama:11434/") == 2
     assert "Cannot reach Ollama at http://ollama:11434`" not in text
+
+
+def test_readme_has_the_eval_section() -> None:
+    text = README.read_text(encoding="utf-8")
+    section = text.split("## Answer quality", 1)[1].split("\n## ", 1)[0]
+    assert "uv run python -m fontes.eval" in section
+    assert "eval/cases.toml" in section
+    assert "\n| facts |" in section

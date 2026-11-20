@@ -245,6 +245,45 @@ The vector dimension is fixed by the database migration (`vector(1024)` for `bge
 - **The stack is async end to end.** FastAPI, SQLAlchemy and `aio-pika` all run on one asyncio event loop. Celery's workers are synchronous at heart, so async code would need a bridge in every task.
 - **The queue topology is explicit on purpose.** Queues, the TTL-based retry queue, the dead-letter queue and the ack rules are written out in `backend/fontes/adapters/messaging/` and can be read in one sitting. A framework would hide exactly the part this project means to show.
 
+## Answer quality
+
+`eval/cases.toml` holds 24 questions about the two fictional samples in `docs/samples/`:
+- 20 can be answered from them, in English and Russian; two are asked in the other language than their document;
+- 4 are off-topic (the capital of France, borscht), and the right answer to them is "nothing found".
+
+The eval asks them through a running stack, the same way the web UI does:
+
+```bash
+cd backend
+uv run python -m fontes.eval          # --base-url http://127.0.0.1:8000 by default
+```
+
+It uploads any missing sample and waits until it is `ready`. It refuses to run on a stack that holds any other document, because that would change what retrieval finds. Its questions land in the history like any other. It prints a summary and writes every answer to `eval/results/<time>.json`, which is git-ignored.
+
+Each answerable question is checked for:
+- **found**: the answer is not `not_found`;
+- **cited**: it cites the expected document;
+- **supported**: every paragraph cites a source;
+- **facts**: it contains the expected facts (for example `90` for oolong). The match ignores case and the spaces inside numbers, and some facts list alternatives (`2 hours|two hours`);
+- **language**: it is in the language of the question.
+
+For an off-topic question, the check **not_found** passes when nothing was found. There is no second model judging the answers, so the scores are repeatable and free. The cost is that a correct answer worded differently from the expected fact counts as a miss.
+
+Baseline, 2026-11-20, `qwen2.5:7b` on Ollama with an RTX 3070 Ti and the default settings; two runs gave the same result:
+
+| check | passed |
+|---|---|
+| found | 20/20 |
+| cited | 19/20 |
+| supported | 20/20 |
+| facts | 18/20 |
+| language | 20/20 |
+| not_found | 4/4 |
+
+22 of 24 passed; the median answer took 0.5 s. The two misses:
+- **`kettle-vinegar`.** The answer is right ("no, use citric acid") but leaves out the warranty, which is the fact the case expects.
+- **`garden-en`.** The English question does not reach the Russian document, which scores below `ASK_MIN_SCORE`. The model then says the sources have no answer but still writes `[1]`, so the refusal is labelled `supported`. Cross-language retrieval and refusals with a marker are the weak spots this set shows.
+
 ## Development
 
 The backend lives in `backend/` and is managed with [uv](https://docs.astral.sh/uv/):
