@@ -31,7 +31,7 @@ export async function* parseSse(chunks: AsyncIterable<Uint8Array>): AsyncGenerat
     yield* drain()
   }
   // At the end, a held CR is a line end after all.
-  buffer += decoder.decode().replace(/\r\n?/g, '\n') + (heldCr ? '\n' : '')
+  buffer += (heldCr ? '\n' : '') + decoder.decode().replace(/\r\n?/g, '\n')
   yield* drain()
   // Whatever is left has no terminating blank line: an incomplete event, dropped.
 }

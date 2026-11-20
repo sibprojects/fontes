@@ -15,6 +15,8 @@ _LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 _MARKER = re.compile(r"([ \t]*)(?:(?<![\w)])\[|[［【])\s*(\d+(?:\s*[,，]\s*\d+)*)\s*[\]］】]")
 _SEPARATOR = re.compile(r"\s*[,，]\s*")
 _FENCE = "```"
+# A sentence ends inside a would-be lead-in: then it holds a claim of its own.
+_SENTENCE_END = re.compile(r"[.!?]\s|[。！？]")
 # Code is quoted, never cited: fenced blocks (an unclosed fence runs to the end) and inline spans.
 _CODE = re.compile(r"```.*?(?:```|\Z)|`[^`\n]*`", re.S)
 
@@ -56,13 +58,20 @@ def _lend_to_lead_ins(cleaned: list[tuple[Paragraph, bool]]) -> tuple[Paragraph,
     introduces the list right after it, and takes the citations of that run of items."""
     result: list[Paragraph] = []
     for i, (paragraph, is_item) in enumerate(cleaned):
-        if not is_item and not paragraph.citations and paragraph.text.endswith(":"):
+        if not is_item and not paragraph.citations and _is_lead_in(paragraph.text):
             cited: list[int] = []
             for item, _ in itertools.takewhile(lambda p: p[1], cleaned[i + 1 :]):
                 cited.extend(n for n in item.citations if n not in cited)
             paragraph = Paragraph(paragraph.text, tuple(cited))
         result.append(paragraph)
     return tuple(result)
+
+
+def _is_lead_in(text: str) -> bool:
+    """A bare introduction: one line, one sentence, ending in a colon (`**Steps:**` and the
+    fullwidth `：` too). A claim before it ("It holds 9 litres. Here is how:") is not lent."""
+    body = text.rstrip("*_ \t")
+    return "\n" not in body and body.endswith((":", "：")) and not _SENTENCE_END.search(body)
 
 
 def _split(text: str) -> list[tuple[str, bool]]:

@@ -59,6 +59,12 @@ describe('parseSse', () => {
     expect(events).toEqual([{ event: 'token', data: '{"text":"a"}' }])
   })
 
+  it('a held CR goes before the decoder tail at the end', async () => {
+    // A cut UTF-8 byte after the CR: the CR still ends the event, the broken byte comes after.
+    const bytes = new Uint8Array([...encoder.encode('data: x\n\r'), 0xe2])
+    expect(await collect(parseSse(chunks(bytes)))).toEqual([{ event: 'message', data: 'x' }])
+  })
+
   it('a lone CR still ends a line', async () => {
     // A guard: a held-back trailing CR must still count at the end of the stream.
     expect(await collect(parseSse(chunks('data: x\r\r')))).toEqual([{ event: 'message', data: 'x' }])

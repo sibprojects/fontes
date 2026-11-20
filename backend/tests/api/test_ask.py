@@ -50,7 +50,7 @@ class Env:
         chunk = Chunk(0, text, section="Install")
         await self.chunks.replace(doc.id, [chunk], await self.embedder.embed([text]))
 
-    async def client(self) -> AsyncIterator[AsyncClient]:
+    async def client(self, question_max_chars: int = 2000) -> AsyncIterator[AsyncClient]:
         documents = DocumentService(
             self.docs, InMemoryFileStorage(), self.chunks, FakePublisher(), max_upload_bytes=100
         )
@@ -61,7 +61,7 @@ class Env:
             max_upload_bytes=100,
             max_attempts=3,
             ask=self.ask,
-            question_max_chars=2000,
+            question_max_chars=question_max_chars,
         )
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -159,6 +159,14 @@ async def test_ask_body_streamed_over_the_limit_is_413(c: AsyncClient) -> None:
 
     r = await c.post("/ask", content=chunks(), headers={"content-type": "application/json"})
     assert r.status_code == 413
+
+
+async def test_body_cap_grows_with_question_max_chars(env: Env) -> None:
+    # A raised QUESTION_MAX_CHARS must not turn a legal question into a 413: 30,000 CJK
+    # characters are about 90 KB as UTF-8 and 180 KB as JSON escapes.
+    async for c in env.client(question_max_chars=30_000):
+        r = await c.post("/ask", json={"question": "水" * 30_000})
+        assert r.status_code == 200
 
 
 async def test_question_at_limit_is_accepted(c: AsyncClient) -> None:

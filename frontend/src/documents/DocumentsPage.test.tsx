@@ -178,6 +178,9 @@ describe('DocumentsPage', () => {
     expect(uploadDocument).toHaveBeenCalledTimes(1)
     expect(screen.getByRole('button', { name: 'Upload' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Add URL' })).toBeDisabled()
+    // A file or URL picked now would be cleared without a word when the upload succeeds.
+    expect(screen.getByLabelText('File')).toBeDisabled()
+    expect(screen.getByLabelText('URL')).toBeDisabled()
     await act(async () => finish())
     expect(screen.getByRole('button', { name: 'Add URL' })).toBeEnabled()
   })

@@ -8,7 +8,13 @@ MULTIPART_OVERHEAD_BYTES = 64 * 1024
 """Slack for multipart boundaries and part headers on top of the file-size limit."""
 
 ASK_BODY_MAX_BYTES = 64 * 1024
-"""Far above QUESTION_MAX_CHARS of UTF-8 JSON; a bigger body is refused before parsing."""
+"""The least cap on `/ask` bodies; a bigger body is refused before parsing."""
+
+
+def ask_body_max_bytes(question_max_chars: int) -> int:
+    """Room for the longest allowed question even as JSON unicode escapes (6 bytes a
+    character), so raising QUESTION_MAX_CHARS never turns a legal question into a 413."""
+    return max(ASK_BODY_MAX_BYTES, question_max_chars * 6 + 1024)
 
 
 class BodySizeLimit:

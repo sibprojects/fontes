@@ -176,3 +176,19 @@ def test_lead_in_without_cited_items_stays_unsupported() -> None:
 
 def test_colon_not_followed_by_a_list_is_not_a_lead_in() -> None:
     assert _supported("Note:\n\nPlain text [1].") == [False, True]
+
+
+def test_lead_in_with_a_claim_stays_unsupported() -> None:
+    # Only a bare introduction borrows the list's citations, never a claim before it.
+    for text in [
+        "The kettle holds 9 litres and needs no descaling.\nHere is how:\n- Fill it [1].",
+        "The kettle holds 9 litres. Here is how:\n\n- Fill it [1].",
+    ]:
+        result = verify(text, 1)
+        assert result.label == AnswerLabel.PARTIALLY_SUPPORTED, text
+        assert result.paragraphs[0].citations == (), text
+
+
+def test_bold_and_fullwidth_lead_ins_count() -> None:
+    for text in ["**Steps:**\n\n- Fill it [1].", "步骤：\n\n- Fill it [1]."]:
+        assert verify(text, 1).label == AnswerLabel.SUPPORTED, text

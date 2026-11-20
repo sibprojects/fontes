@@ -124,7 +124,7 @@ data: {"question_id": "…", "label": "supported", "paragraphs": [{"text": "Run 
 - **`verdict`** comes once, at the end. It holds the verified answer, which is what is stored in the history. Show this one.
 - **`error`** (`{"detail": "..."}`) replaces the verdict if anything fails mid-way, for example `Cannot reach Ollama at http://ollama:11434/: ...`. A failed question is not stored.
 
-A blank question, or one over 2000 characters, is rejected with `422` before any streaming. A request body over 64 KiB is refused with `413` before it is read in full.
+A blank question, or one over 2000 characters, is rejected with `422` before any streaming. A request body over 64 KiB (more if `QUESTION_MAX_CHARS` is raised) is refused with `413` before it is read in full.
 
 **How verification works.** The model is told to put a source marker such as `[1]` or `[2][3]` in every paragraph and list item. After the answer is complete, Fontes splits it into paragraphs (blank-line separated) and list items, and checks each marker:
 
@@ -133,7 +133,7 @@ A blank question, or one over 2000 characters, is rejected with `422` before any
 - **Paragraphs.** A paragraph is `supported` if at least one valid marker is left in it.
 - **Code.** Brackets inside code (`` `arr[0]` `` or a fenced block) and indexes such as `a[2]` are not markers: they are left as they are and never count as citations. A fenced block is one paragraph even with blank lines inside.
 - **Fullwidth markers** such as `【1】` count too and are rewritten as `[1]`.
-- **Lead-in lines.** A line ending in `:` right before a list ("Here is how:") counts as supported if the list cites a source.
+- **Lead-in lines.** A single line ending in `:` right before a list ("Here is how:", `**Steps:**`) counts as supported if the list cites a source. A line that also makes a claim ("It holds 9 litres. Here is how:") does not.
 
 | Label | Meaning |
 |---|---|
@@ -282,7 +282,7 @@ docker compose up -d postgres rabbitmq
 cd backend && uv run pytest -m integration
 ```
 
-CI runs all of the above, backend and frontend, on every push and pull request to `main`. A second job then builds the images, starts the whole stack with Compose and runs `scripts/smoke.sh`, which checks that the UI is served and its `/api` proxy works, uploads a file, waits for it to become `ready` with real Ollama embeddings (the job pulls `bge-m3`), checks that its chunks are stored, then asks one question through `POST /ask` and checks that it ends with a verdict and lands in the history. CI uses the small `qwen2.5:0.5b` chat model: it checks the wiring, not the quality of answers. You can run the same check against your local stack:
+CI runs all of the above, backend and frontend, on every push and pull request to `main`. A second job then builds the images, starts the whole stack with Compose and runs `scripts/smoke.sh`, which checks that the UI is served and its `/api` proxy works, uploads a file, waits for it to become `ready` with real Ollama embeddings (the stack pulls `bge-m3`, and the job pulls the chat model in a step of its own), checks that its chunks are stored, then asks one question about the file through `POST /ask` and checks that it ends with a verdict other than `not_found` and lands in the history. CI uses the small `qwen2.5:0.5b` chat model: it checks the wiring, not the quality of answers. You can run the same check against your local stack:
 
 ```bash
 scripts/smoke.sh   # or: scripts/smoke.sh http://host:8000 http://host:28080

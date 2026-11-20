@@ -36,6 +36,14 @@ def test_readme_names_the_pgvector_version() -> None:
     assert "pgvector 0.8" in README.read_text(encoding="utf-8")
 
 
+def test_ci_paragraph_matches_the_smoke() -> None:
+    text = README.read_text(encoding="utf-8")
+    ci = text.split("CI runs all of the above", 1)[1].split("\n\n", 1)[0]
+    assert "not_found" in ci
+    assert "chat model in a step of its own" in ci
+    assert "A single line ending in `:`" in text
+
+
 def test_error_example_matches_httpx() -> None:
     # httpx keeps the trailing slash of its base URL, so that is what the error says.
     text = README.read_text(encoding="utf-8")

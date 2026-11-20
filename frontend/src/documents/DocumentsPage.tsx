@@ -109,6 +109,7 @@ export function DocumentsPage() {
             <input
               key={fileInputKey}
               type="file"
+              disabled={busy}
               accept=".pdf,.md,.markdown,.html,.htm"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />
@@ -120,7 +121,7 @@ export function DocumentsPage() {
         <form onSubmit={onAddUrl}>
           <label>
             URL
-            <input type="url" placeholder="https://…" value={url} onChange={(e) => setUrl(e.target.value)} />
+            <input type="url" placeholder="https://…" disabled={busy} value={url} onChange={(e) => setUrl(e.target.value)} />
           </label>
           <button type="submit" disabled={busy || !url.trim()}>
             Add URL
