@@ -1,0 +1,175 @@
+# The answer-quality eval set: questions about the fictional samples in docs/samples/.
+# Run it against a live stack with `cd backend && uv run python -m fontes.eval`.
+#
+# A case with a `document` is answerable: the answer should cite that sample and contain
+# every `expect` entry (one of its `|` alternatives, compared case-insensitively, with the
+# spaces inside numbers ignored), in `language`. A case without a `document` is off-topic:
+# the right answer is `not_found`.
+
+# --- lumen-kettle.md ---
+
+[[case]]
+id = "kettle-oolong"
+question = "What temperature should I use for oolong tea?"
+document = "lumen-kettle.md"
+expect = ["90"]
+language = "en"
+
+[[case]]
+id = "kettle-green-tea"
+question = "Which preset is meant for green tea?"
+document = "lumen-kettle.md"
+expect = ["70"]
+language = "en"
+
+[[case]]
+id = "kettle-first-fill"
+question = "How much water must be in the kettle before the first use?"
+document = "lumen-kettle.md"
+expect = ["0.5"]
+language = "en"
+
+[[case]]
+id = "kettle-pairing"
+question = "How do I pair the kettle with the app?"
+document = "lumen-kettle.md"
+expect = ["5", "bluetooth"]
+language = "en"
+
+[[case]]
+id = "kettle-custom-range"
+question = "What range can a custom temperature preset have?"
+document = "lumen-kettle.md"
+expect = ["40", "100"]
+language = "en"
+
+[[case]]
+id = "kettle-keep-warm-time"
+question = "How long does keep-warm hold the temperature?"
+document = "lumen-kettle.md"
+expect = ["2 hours|two hours"]
+language = "en"
+
+[[case]]
+id = "kettle-keep-warm-on"
+question = "How do I turn keep-warm on?"
+document = "lumen-kettle.md"
+expect = ["double"]
+language = "en"
+
+[[case]]
+id = "kettle-descale-often"
+question = "How often should I descale in a hard-water area?"
+document = "lumen-kettle.md"
+expect = ["4 weeks|four weeks"]
+language = "en"
+
+[[case]]
+id = "kettle-descale-mix"
+question = "What should I descale the kettle with?"
+document = "lumen-kettle.md"
+expect = ["citric"]
+language = "en"
+
+[[case]]
+id = "kettle-orange-light"
+question = "What does an orange ring light mean?"
+document = "lumen-kettle.md"
+expect = ["descal"]
+language = "en"
+
+[[case]]
+id = "kettle-warranty"
+question = "How long is the warranty?"
+document = "lumen-kettle.md"
+expect = ["3-year|3 year|three-year|three year"]
+language = "en"
+
+[[case]]
+id = "kettle-vinegar"
+question = "Can I descale the kettle with vinegar?"
+document = "lumen-kettle.md"
+expect = ["warranty"]
+language = "en"
+
+# Asked in Russian about an English document: the answer should be in Russian.
+[[case]]
+id = "kettle-ru"
+question = "Какая температура нужна для улуна?"
+document = "lumen-kettle.md"
+expect = ["90"]
+language = "ru"
+
+# --- sad-pravila.md ---
+
+[[case]]
+id = "garden-watering"
+question = "В какое время можно поливать из общего водопровода?"
+document = "sad-pravila.md"
+expect = ["7:00|7.00", "19:00|19.00"]
+language = "ru"
+
+[[case]]
+id = "garden-fee"
+question = "Сколько составляет членский взнос?"
+document = "sad-pravila.md"
+expect = ["4800"]
+language = "ru"
+
+[[case]]
+id = "garden-fee-deadline"
+question = "До какого числа нужно внести членский взнос?"
+document = "sad-pravila.md"
+expect = ["1 июня"]
+language = "ru"
+
+[[case]]
+id = "garden-late-fee"
+question = "Какие пени за просрочку взноса?"
+document = "sad-pravila.md"
+expect = ["0,1|0.1"]
+language = "ru"
+
+[[case]]
+id = "garden-noise"
+question = "Когда нельзя работать газонокосилкой?"
+document = "sad-pravila.md"
+expect = ["воскресень"]
+language = "ru"
+
+[[case]]
+id = "garden-burning"
+question = "Можно ли сжигать строительный мусор на участке?"
+document = "sad-pravila.md"
+expect = ["запрещ|нельзя"]
+language = "ru"
+
+# Asked in English about a Russian document: the answer should be in English.
+[[case]]
+id = "garden-en"
+question = "On which day is the water supply switched off in July and August?"
+document = "sad-pravila.md"
+expect = ["wednesday"]
+language = "en"
+
+# --- off-topic: nothing in the samples answers these ---
+
+[[case]]
+id = "off-capital"
+question = "What is the capital of France?"
+language = "en"
+
+[[case]]
+id = "off-bitcoin"
+question = "How do I mine bitcoin on a laptop?"
+language = "en"
+
+[[case]]
+id = "off-borscht"
+question = "Как приготовить борщ?"
+language = "ru"
+
+[[case]]
+id = "off-football"
+question = "Кто выиграл чемпионат мира по футболу 2018 года?"
+language = "ru"
