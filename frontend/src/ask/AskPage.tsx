@@ -113,31 +113,34 @@ export function AskPage({ historyId = null, historyLoad = 0, onAsk, onAnswered }
         </button>
       </form>
 
-      {view.kind === 'streaming' && (
-        <article className="answer provisional">
-          <h2 className="question">{view.question}</h2>
-          <span className="label label-verifying">verifying…</span>
-          <p className="paragraph">{view.text}</p>
-        </article>
-      )}
+      {/* Screen readers announce the answer once it settles, not every streamed token. */}
+      <div aria-live="polite" aria-busy={streaming}>
+        {view.kind === 'streaming' && (
+          <article className="answer provisional">
+            <h2 className="question">{view.question}</h2>
+            <span className="label label-verifying">verifying…</span>
+            <p className="paragraph">{view.text}</p>
+          </article>
+        )}
 
-      {view.kind === 'answered' && (
-        <AnswerView
-          question={view.question}
-          paragraphs={view.verdict.paragraphs}
-          citations={view.verdict.citations}
-          label={view.verdict.label}
-        />
-      )}
+        {view.kind === 'answered' && (
+          <AnswerView
+            question={view.question}
+            paragraphs={view.verdict.paragraphs}
+            citations={view.verdict.citations}
+            label={view.verdict.label}
+          />
+        )}
 
-      {view.kind === 'failed' && (
-        <article className="answer">
-          {view.question && <h2 className="question">{view.question}</h2>}
-          <p role="alert" className="error">
-            {view.detail}
-          </p>
-        </article>
-      )}
+        {view.kind === 'failed' && (
+          <article className="answer">
+            {view.question && <h2 className="question">{view.question}</h2>}
+            <p role="alert" className="error">
+              {view.detail}
+            </p>
+          </article>
+        )}
+      </div>
     </section>
   )
 }

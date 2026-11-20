@@ -11,8 +11,10 @@ const CLOSED_EARLY = 'The connection closed before the answer was verified.'
 export async function* parseSse(chunks: AsyncIterable<Uint8Array>): AsyncGenerator<SseEvent> {
   const decoder = new TextDecoder()
   let buffer = ''
-  for await (const chunk of chunks) {
-    buffer += decoder.decode(chunk, { stream: true }).replace(/\r\n?/g, '\n')
+  // A CR at the end of a read is held back: only the next read says whether it is half of a
+  // CRLF (one line end) or a lone CR (a line end of its own, followed by another).
+  let heldCr = false
+  function* drain(): Generator<SseEvent> {
     let end: number
     while ((end = buffer.indexOf('\n\n')) !== -1) {
       const block = buffer.slice(0, end)
@@ -21,6 +23,16 @@ export async function* parseSse(chunks: AsyncIterable<Uint8Array>): AsyncGenerat
       if (event) yield event
     }
   }
+  for await (const chunk of chunks) {
+    let text: string = (heldCr ? '\r' : '') + decoder.decode(chunk, { stream: true })
+    heldCr = text.endsWith('\r')
+    if (heldCr) text = text.slice(0, -1)
+    buffer += text.replace(/\r\n?/g, '\n')
+    yield* drain()
+  }
+  // At the end, a held CR is a line end after all.
+  buffer += decoder.decode().replace(/\r\n?/g, '\n') + (heldCr ? '\n' : '')
+  yield* drain()
   // Whatever is left has no terminating blank line: an incomplete event, dropped.
 }
 

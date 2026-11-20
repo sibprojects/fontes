@@ -75,6 +75,27 @@ describe('AskPage', () => {
     expect(onAnswered).toHaveBeenCalledWith('q1')
   })
 
+  it('the answer region announces itself', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    vi.mocked(ask).mockImplementation(async function* () {
+      yield { type: 'token', text: 'Run ' }
+      await gate
+      yield { type: 'verdict', verdict }
+    })
+    const { container } = render(<AskPage />)
+    const region = container.querySelector('section.ask [aria-live="polite"]')
+    expect(region).not.toBeNull()
+    expect(region).toHaveAttribute('aria-busy', 'false')
+    await askQuestion()
+    await screen.findByText('verifying…')
+    expect(region).toHaveAttribute('aria-busy', 'true')
+    expect(region).toContainElement(screen.getByText('verifying…'))
+    release()
+    await screen.findByText('Supported by sources')
+    expect(region).toHaveAttribute('aria-busy', 'false')
+  })
+
   it('shows the detail of a rejected question', async () => {
     vi.mocked(ask).mockImplementation(async function* () {
       yield* []

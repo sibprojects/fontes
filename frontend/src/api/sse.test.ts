@@ -53,6 +53,16 @@ describe('parseSse', () => {
     const events = await collect(parseSse(chunks('data: 1\r\n\r\n')))
     expect(events).toEqual([{ event: 'message', data: '1' }])
   })
+
+  it('CRLF split between reads', async () => {
+    const events = await collect(parseSse(chunks('event: token\r', '\ndata: {"text":"a"}\r\n\r', '\n')))
+    expect(events).toEqual([{ event: 'token', data: '{"text":"a"}' }])
+  })
+
+  it('a lone CR still ends a line', async () => {
+    // A guard: a held-back trailing CR must still count at the end of the stream.
+    expect(await collect(parseSse(chunks('data: x\r\r')))).toEqual([{ event: 'message', data: 'x' }])
+  })
 })
 
 describe('ask', () => {
