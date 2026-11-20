@@ -10,3 +10,6 @@ dist/
 
 # Local uploads (STORAGE_DIR default)
 data/
+
+# Eval runs (python -m fontes.eval)
+eval/results/
