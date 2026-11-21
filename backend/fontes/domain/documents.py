@@ -15,6 +15,7 @@ class DocumentStatus(StrEnum):
 
 class SourceType(StrEnum):
     PDF = "pdf"
+    DOCX = "docx"
     MARKDOWN = "markdown"
     HTML = "html"
     URL = "url"
@@ -34,6 +35,7 @@ class InvalidUrlError(DocumentError):
 
 _EXTENSIONS = {
     ".pdf": SourceType.PDF,
+    ".docx": SourceType.DOCX,
     ".md": SourceType.MARKDOWN,
     ".markdown": SourceType.MARKDOWN,
     ".html": SourceType.HTML,

@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from fontes.adapters.embeddings.ollama import OllamaEmbedder
 from fontes.adapters.llm.claude import ClaudeLLM
 from fontes.adapters.llm.ollama import OllamaLLM
+from fontes.adapters.loaders.docx import parse_docx
 from fontes.adapters.loaders.html import parse_html
 from fontes.adapters.loaders.markdown import parse_markdown
 from fontes.adapters.loaders.pdf import parse_pdf
@@ -166,6 +167,7 @@ def _pipeline(
     storage = LocalFileStorage(settings.storage_dir)
     loaders: dict[SourceType, DocumentLoader] = {
         SourceType.PDF: StoredFileLoader(storage, parse_pdf),
+        SourceType.DOCX: StoredFileLoader(storage, parse_docx),
         SourceType.MARKDOWN: StoredFileLoader(storage, parse_markdown),
         SourceType.HTML: StoredFileLoader(storage, parse_html),
         SourceType.URL: UrlLoader(

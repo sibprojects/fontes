@@ -106,6 +106,13 @@ describe('DocumentsPage', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 
+  it('accepts Word files and says so when empty', async () => {
+    vi.mocked(listDocuments).mockResolvedValue([])
+    setup()
+    expect(screen.getByLabelText('File')).toHaveAttribute('accept', expect.stringContaining('.docx'))
+    expect(await screen.findByText(/Upload a PDF, Word, Markdown or HTML file/)).toBeInTheDocument()
+  })
+
   it('uploads the chosen file and refreshes', async () => {
     list.mockResolvedValueOnce([]).mockResolvedValue([doc({ status: 'queued', attempts: 0 })])
     vi.mocked(uploadDocument).mockResolvedValue(doc({}))
@@ -215,7 +222,7 @@ describe('DocumentsPage', () => {
     list.mockResolvedValue([])
     setup()
     expect(
-      await screen.findByText('No documents yet. Upload a PDF, Markdown or HTML file, or add a URL.'),
+      await screen.findByText('No documents yet. Upload a PDF, Word, Markdown or HTML file, or add a URL.'),
     ).toBeInTheDocument()
   })
 })

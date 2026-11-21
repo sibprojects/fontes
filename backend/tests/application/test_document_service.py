@@ -89,7 +89,7 @@ async def test_upload_rejects_unsupported_before_storing(
     svc: DocumentService, storage: InMemoryFileStorage
 ) -> None:
     with pytest.raises(UnsupportedSourceError):
-        await svc.upload("a.docx", b"x")
+        await svc.upload("a.doc", b"x")
     assert storage.files == {}
 
 

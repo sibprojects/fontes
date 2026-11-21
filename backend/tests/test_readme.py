@@ -64,3 +64,10 @@ def test_eval_section_says_how_numbers_match() -> None:
     section = text.split("## Answer quality", 1)[1].split("\n## ", 1)[0]
     assert "`90` does not match `190`" in section
     assert "citation markers" in section
+
+
+def test_readme_lists_docx() -> None:
+    text = README.read_text(encoding="utf-8")
+    assert "(PDF, Word, Markdown, HTML or a web page)" in text
+    assert "`.pdf`, `.docx`, `.md`" in text
+    assert "| Word (`.docx`) | the nearest heading above it" in text

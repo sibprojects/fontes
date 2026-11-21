@@ -1,7 +1,7 @@
 // Hand-written mirrors of backend/fontes/api/schemas.py. Datetimes arrive as ISO strings.
 
 export type DocumentStatus = 'queued' | 'processing' | 'ready' | 'failed'
-export type SourceType = 'pdf' | 'markdown' | 'html' | 'url'
+export type SourceType = 'pdf' | 'docx' | 'markdown' | 'html' | 'url'
 export type Label = 'supported' | 'partially_supported' | 'unsupported' | 'not_found'
 
 export type DocumentOut = {

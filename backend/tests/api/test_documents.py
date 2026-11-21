@@ -102,7 +102,7 @@ async def test_upload_too_large_returns_413(c: AsyncClient, storage: InMemoryFil
 
 
 async def test_upload_unsupported_returns_415(c: AsyncClient) -> None:
-    r = await c.post("/documents", files=pdf(name="a.docx"))
+    r = await c.post("/documents", files=pdf(name="a.doc"))
     assert r.status_code == 415
     assert ".pdf" in r.json()["detail"]
 

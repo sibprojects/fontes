@@ -25,7 +25,7 @@ flowchart LR
     api -. "chat (LLM_PROVIDER=claude)" .-> claude["Claude API"]
 ```
 
-**Ingest path.** An upload or URL is stored and recorded as `queued`, and its id is published to RabbitMQ. The worker picks it up, parses it (PDF, Markdown, HTML or a web page), splits it into chunks, embeds them with `bge-m3` on Ollama and stores the vectors in Postgres with pgvector. Failures are retried with a delay, then marked `failed` with the reason (see [How ingestion works](#how-ingestion-works)).
+**Ingest path.** An upload or URL is stored and recorded as `queued`, and its id is published to RabbitMQ. The worker picks it up, parses it (PDF, Word, Markdown, HTML or a web page), splits it into chunks, embeds them with `bge-m3` on Ollama and stores the vectors in Postgres with pgvector. Failures are retried with a delay, then marked `failed` with the reason (see [How ingestion works](#how-ingestion-works)).
 
 **Ask path.** The api embeds the question, finds the closest chunks in pgvector and hands them to the chat model (Ollama, or Claude when configured) as numbered sources. The answer streams back to the browser over SSE. When it is complete, the api checks every `[n]` citation against the sources it gave, labels the answer and stores it in the history.
 
@@ -80,7 +80,7 @@ At phone width the history sits above the answer; picking an entry shows the sto
 
 | Method | Path | What it does |
 |---|---|---|
-| `POST` | `/documents` | Upload a file (multipart field `file`): `.pdf`, `.md`, `.markdown`, `.html`, `.htm`, up to 20 MiB |
+| `POST` | `/documents` | Upload a file (multipart field `file`): `.pdf`, `.docx`, `.md`, `.markdown`, `.html`, `.htm`, up to 20 MiB |
 | `POST` | `/documents/url` | Add a web page by URL: `{"url": "https://..."}` |
 | `GET` | `/documents` | List documents, newest first. Each has `status`, `error`, `attempts` and `max_attempts` (`INGEST_MAX_ATTEMPTS`), so a client can show "retry 2/3" |
 | `GET` | `/documents/{id}/chunks` | The document's chunks in order: `[{"ordinal", "location", "text"}]` (empty until it is `ready`) |
@@ -196,6 +196,7 @@ Processing means: extract the text, split it into chunks of up to about 1500 cha
 | Format | How a chunk is cited |
 |---|---|
 | PDF (`.pdf`) | page: `p. 4`, or `pp. 4–5` for a chunk that spans two pages |
+| Word (`.docx`) | the nearest heading above it (paragraphs styled Title or Heading 1–9); tables are read row by row, one line per row |
 | Markdown (`.md`, `.markdown`) | the nearest heading above it |
 | HTML (`.html`, `.htm`) and web pages (by URL) | the nearest heading above it |
 

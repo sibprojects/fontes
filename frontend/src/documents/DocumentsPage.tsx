@@ -110,7 +110,7 @@ export function DocumentsPage() {
               key={fileInputKey}
               type="file"
               disabled={busy}
-              accept=".pdf,.md,.markdown,.html,.htm"
+              accept=".pdf,.docx,.md,.markdown,.html,.htm"
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />
           </label>
@@ -135,7 +135,7 @@ export function DocumentsPage() {
         </p>
       )}
 
-      {docs?.length === 0 && <p className="muted">No documents yet. Upload a PDF, Markdown or HTML file, or add a URL.</p>}
+      {docs?.length === 0 && <p className="muted">No documents yet. Upload a PDF, Word, Markdown or HTML file, or add a URL.</p>}
 
       {docs && docs.length > 0 && (
         <table className="documents">

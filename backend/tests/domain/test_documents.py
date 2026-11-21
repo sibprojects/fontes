@@ -23,6 +23,7 @@ T0 = datetime(2026, 11, 5, 12, 0, tzinfo=UTC)
         ("a.markdown", SourceType.MARKDOWN),
         ("a.html", SourceType.HTML),
         ("a.htm", SourceType.HTML),
+        ("Report.DOCX", SourceType.DOCX),
     ],
 )
 def test_source_type_for_filename(name: str, expected: SourceType) -> None:
@@ -33,7 +34,7 @@ def test_source_type_is_case_insensitive() -> None:
     assert source_type_for_filename("отчёт 2026.PDF") == SourceType.PDF
 
 
-@pytest.mark.parametrize("name", ["a.docx", "a", "pdf", "a.pdf.exe", ""])
+@pytest.mark.parametrize("name", ["a.doc", "a", "pdf", "a.pdf.exe", ""])
 def test_unsupported_source(name: str) -> None:
     with pytest.raises(UnsupportedSourceError):
         source_type_for_filename(name)
@@ -81,3 +82,8 @@ def test_from_url() -> None:
         None,
     )
     assert d.status == DocumentStatus.QUEUED
+
+
+def test_unsupported_message_lists_docx() -> None:
+    with pytest.raises(UnsupportedSourceError, match=r"\.docx"):
+        source_type_for_filename("a.doc")
