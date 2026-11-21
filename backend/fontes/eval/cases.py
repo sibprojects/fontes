@@ -35,18 +35,26 @@ def load_cases(path: Path, samples_dir: Path) -> list[Case]:
     samples = {p.name for p in samples_dir.iterdir()}
     cases: list[Case] = []
     seen: set[str] = set()
-    for raw in data.get("case", []):
-        case = Case(
-            id=str(raw["id"]),
-            question=str(raw["question"]),
-            document=raw.get("document"),
-            expect=tuple(str(e) for e in raw.get("expect", [])),
-            language=str(raw["language"]),
-        )
+    for index, raw in enumerate(data.get("case", []), 1):
+        case = _case(index, raw)
         _check(case, seen, samples)
         seen.add(case.id)
         cases.append(case)
     return cases
+
+
+def _case(index: int, raw: dict[str, Any]) -> Case:
+    name = f"case {index} ({raw.get('id')!r})"
+    for key in ("id", "question", "language"):
+        if not isinstance(raw.get(key), str):
+            raise CaseError(f"{name}: {key} must be a string")
+    document = raw.get("document")
+    if document is not None and not isinstance(document, str):
+        raise CaseError(f"{name}: document must be a string")
+    expect = raw.get("expect", [])
+    if not isinstance(expect, list) or not all(isinstance(e, str) for e in expect):
+        raise CaseError(f"{name}: expect must be a list of strings")
+    return Case(raw["id"], raw["question"], document, tuple(expect), raw["language"])
 
 
 def _check(case: Case, seen: set[str], samples: set[str]) -> None:

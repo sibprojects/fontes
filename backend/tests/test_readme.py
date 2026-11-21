@@ -57,3 +57,10 @@ def test_readme_has_the_eval_section() -> None:
     assert "uv run python -m fontes.eval" in section
     assert "eval/cases.toml" in section
     assert "\n| facts |" in section
+
+
+def test_eval_section_says_how_numbers_match() -> None:
+    text = README.read_text(encoding="utf-8")
+    section = text.split("## Answer quality", 1)[1].split("\n## ", 1)[0]
+    assert "`90` does not match `190`" in section
+    assert "citation markers" in section

@@ -98,3 +98,25 @@ def test_summarize_and_render() -> None:
     assert "Cannot reach Ollama" in text
     assert "kettle-oolong" not in text
     assert "unknown" in render(summary, results, None, None)
+
+
+def test_a_citation_marker_is_not_a_fact() -> None:
+    case = Case("kettle-pairing", "Pair?", "lumen-kettle.md", ("5",), "en")
+    assert score(case, _outcome("Use the app [5].")).checks["facts"] is False
+    assert score(case, _outcome("Use the app [1, 5].")).checks["facts"] is False
+    assert score(case, _outcome("Hold it for 5 seconds [1].")).checks["facts"] is True
+
+
+@pytest.mark.parametrize(
+    ("answer", "found"),
+    [
+        ("Use 190 °C [1].", False),
+        ("Use 900 W [1].", False),
+        ("Use 1990 [1].", False),
+        ("Use 90 °C [1].", True),
+        ("Use 90°C [1].", True),
+        ("(90) [1]", True),
+    ],
+)
+def test_numbers_match_whole(answer: str, found: bool) -> None:
+    assert score(KETTLE, _outcome(answer)).checks["facts"] is found

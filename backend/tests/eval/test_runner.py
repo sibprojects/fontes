@@ -52,6 +52,9 @@ class FakeApi:
         # Polls of /documents a new upload stays `processing` for.
         self.processing_polls = 1
         self.stored: dict[str, tuple[str | None, str | None]] = {}
+        # When set, `GET /documents` answers with this instead.
+        self.documents_response: httpx.Response | None = None
+        self.questions_down = False
 
     def answer(self, question: str, body: str, provider: str = "ollama") -> None:
         self.answers[question] = httpx.Response(200, text=body)
@@ -61,6 +64,10 @@ class FakeApi:
 
     def handle(self, request: httpx.Request) -> httpx.Response:
         path = request.url.path
+        if request.method == "GET" and path == "/documents" and self.documents_response:
+            return self.documents_response
+        if request.method == "GET" and path.startswith("/questions/") and self.questions_down:
+            raise httpx.ConnectError("connection refused", request=request)
         if request.method == "GET" and path == "/documents":
             for doc in self.docs:
                 if doc["status"] == "processing" and doc.get("polls", 0) >= self.processing_polls:
@@ -224,3 +231,76 @@ def test_main_writes_the_report(
     assert (first["id"], first["passed"]) == ("kettle-oolong", True)
     assert report["summary"]["cases"] == 24
     assert "| facts |" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    "response",
+    [
+        httpx.Response(500, text="Internal Server Error"),
+        httpx.Response(200, text="<!doctype html><html></html>"),
+        httpx.Response(200, json={"detail": "not a list"}),
+    ],
+    ids=["server-error", "html", "not-a-list"],
+)
+async def test_prepare_on_something_that_is_not_the_api(response: httpx.Response) -> None:
+    api = FakeApi()
+    api.documents_response = response
+    async with api.client() as client:
+        with pytest.raises(StackError, match="http://fontes.test"):
+            await client.prepare(DEFAULT_SAMPLES)
+
+
+async def test_foreign_documents_message_names_the_samples_dir(tmp_path: Path) -> None:
+    (tmp_path / "only.md").write_text("# Only\n", encoding="utf-8")
+    api = FakeApi(("other.md", "ready"))
+    async with api.client() as client:
+        with pytest.raises(StackError) as caught:
+            await client.prepare(tmp_path)
+    assert str(tmp_path) in str(caught.value) and "Delete them" in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    "body",
+    ["event: verdict\ndata: {not json\n\n", sse("verdict", {"label": "supported"})],
+    ids=["bad-json", "missing-keys"],
+)
+async def test_ask_records_a_malformed_event(body: str) -> None:
+    api = FakeApi()
+    api.answer("Q?", body)
+    async with api.client() as client:
+        outcome, _, _ = await client.ask("Q?")
+    assert outcome.error is not None and outcome.error.startswith("malformed event")
+    assert outcome.label is None
+
+
+async def test_ask_survives_a_failed_history_lookup() -> None:
+    api = FakeApi()
+    api.answer("Q?", verdict("q1", "supported", ["90 [1]."], [KETTLE]))
+    api.questions_down = True
+    async with api.client() as client:
+        outcome, provider, model = await client.ask("Q?")
+    assert (outcome.label, outcome.error) == ("supported", None)
+    assert (provider, model) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "text",
+    ["[[case]\n", '[[case]]\nid = "x"\nlanguage = "en"\n'],
+    ids=["bad-toml", "missing-key"],
+)
+def test_main_broken_cases_file_exits_1(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str], text: str
+) -> None:
+    cases = tmp_path / "cases.toml"
+    cases.write_text(text, encoding="utf-8")
+    assert cli.main(["--cases", str(cases), "--base-url", "http://127.0.0.1:9"]) == 1
+    err = capsys.readouterr().err
+    assert err.startswith("error: ") and str(cases) in err
+
+
+def test_main_missing_cases_file_exits_1(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    missing = tmp_path / "nope.toml"
+    assert cli.main(["--cases", str(missing)]) == 1
+    assert capsys.readouterr().err.startswith("error: ")

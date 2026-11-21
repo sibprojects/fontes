@@ -58,8 +58,9 @@ class EvalClient:
             foreign = sorted(d["title"] for d in docs if d["title"] not in names)
             if foreign:
                 raise StackError(
-                    "the eval needs a stack holding only the samples in docs/samples/; "
-                    f"it also holds: {', '.join(foreign)}"
+                    f"the eval needs a stack holding only the samples in {samples_dir}; "
+                    f"it also holds: {', '.join(foreign)}. "
+                    "Delete them, or point --base-url at a fresh stack"
                 )
             present = {d["title"] for d in docs}
             for name, data in samples.items():
@@ -77,14 +78,25 @@ class EvalClient:
             answer, label, titles, error, qid = await self._stream(question)
         except httpx.HTTPError as exc:
             answer, label, titles, error = "", None, (), f"{type(exc).__name__}: {exc}"
+        except (ValueError, KeyError, TypeError) as exc:
+            answer, label, titles, error = "", None, (), f"malformed event: {exc!r}"
         outcome = Outcome(answer, label, titles, error, time.monotonic() - started)
         provider, model = await self._stored(qid) if qid else (None, None)
         return outcome, provider, model
 
     async def _documents(self) -> list[dict[str, Any]]:
         response = await self._http.get("/documents")
-        response.raise_for_status()
-        docs: list[dict[str, Any]] = response.json()
+        not_api = f"{self._base_url} does not look like the Fontes API"
+        if response.is_error:
+            raise StackError(f"{not_api}: {_detail(response)}")
+        try:
+            docs = response.json()
+        except ValueError:
+            raise StackError(f"{not_api}: GET /documents did not return JSON") from None
+        if not isinstance(docs, list) or not all(
+            isinstance(d, dict) and {"title", "status"} <= d.keys() for d in docs
+        ):
+            raise StackError(f"{not_api}: GET /documents did not return a list of documents")
         return docs
 
     async def _upload(self, name: str, data: bytes) -> None:
@@ -132,10 +144,14 @@ class EvalClient:
         return "", None, (), NO_VERDICT, None
 
     async def _stored(self, question_id: str) -> tuple[str | None, str | None]:
-        response = await self._http.get(f"/questions/{question_id}")
-        if response.is_error:
+        """Best effort: the answer counts even when its history lookup fails."""
+        try:
+            response = await self._http.get(f"/questions/{question_id}")
+            body = response.json() if not response.is_error else {}
+        except (httpx.HTTPError, ValueError):
             return None, None
-        body = response.json()
+        if not isinstance(body, dict):
+            return None, None
         return body.get("provider"), body.get("model")
 
 

@@ -65,3 +65,26 @@ def test_a_good_file_loads(tmp_path: Path) -> None:
     first, second = load_cases(cases, samples)
     assert (first.id, first.document, first.expect, first.language) == ("y", "a.md", ("1",), "en")
     assert (second.id, second.document, second.expect) == ("z", None, ())
+
+
+def test_a_missing_key_names_the_case(tmp_path: Path) -> None:
+    samples = tmp_path / "samples"
+    samples.mkdir()
+    (samples / "a.md").write_text("# A\n", encoding="utf-8")
+    cases = tmp_path / "cases.toml"
+    cases.write_text(f'[[case]]\n{GOOD}[[case]]\nid = "z"\nlanguage = "en"\n', encoding="utf-8")
+    with pytest.raises(CaseError, match=r"case 2 \('z'\).*question"):
+        load_cases(cases, samples)
+
+
+def test_a_document_must_be_a_string(tmp_path: Path) -> None:
+    samples = tmp_path / "samples"
+    samples.mkdir()
+    cases = tmp_path / "cases.toml"
+    cases.write_text(
+        '[[case]]\nid = "x"\nquestion = "Q?"\ndocument = ["a.md"]\n'
+        'expect = ["1"]\nlanguage = "en"\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(CaseError, match="x"):
+        load_cases(cases, samples)

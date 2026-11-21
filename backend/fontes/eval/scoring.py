@@ -20,6 +20,8 @@ _ODD_SPACES = str.maketrans({" ": " ", " ": " ", " ": " "})
 _SPACE_IN_NUMBER = re.compile(r"(?<=\d) (?=\d)")
 _WHITESPACE = re.compile(r"\s+")
 _ANSWER_PREVIEW_CHARS = 120
+# Citation markers, so `[5]` is not read as the fact "5".
+_MARKER = re.compile(r"[\[［【]\s*\d+(?:\s*[,，]\s*\d+)*\s*[\]］】]")
 
 
 @dataclass(frozen=True)
@@ -68,6 +70,13 @@ def normalize(text: str) -> str:
     return _SPACE_IN_NUMBER.sub("", text)
 
 
+def _contains(answer: str, fact: str) -> bool:
+    """Substring match, but a number only matches whole: "90" is not in "190" or "900"."""
+    before = r"(?<!\d)" if fact[:1].isdigit() else ""
+    after = r"(?!\d)" if fact[-1:].isdigit() else ""
+    return re.search(before + re.escape(fact) + after, answer) is not None
+
+
 def score(case: Case, outcome: Outcome) -> CaseResult:
     names: tuple[str, ...]
     if case.document is None:
@@ -75,13 +84,14 @@ def score(case: Case, outcome: Outcome) -> CaseResult:
         checks = {"not_found": outcome.label == "not_found"}
     else:
         names = ANSWERABLE_CHECKS
-        answer = normalize(outcome.answer)
+        answer = normalize(_MARKER.sub(" ", outcome.answer))
         checks = {
             "found": outcome.label != "not_found",
             "cited": case.document in outcome.documents,
             "supported": outcome.label == "supported",
             "facts": all(
-                any(normalize(alt) in answer for alt in entry.split("|")) for entry in case.expect
+                any(_contains(answer, normalize(alt)) for alt in entry.split("|"))
+                for entry in case.expect
             ),
             "language": detect_language(outcome.answer) == case.language,
         }

@@ -33,7 +33,7 @@ language = "en"
 id = "kettle-pairing"
 question = "How do I pair the kettle with the app?"
 document = "lumen-kettle.md"
-expect = ["5", "bluetooth"]
+expect = ["5 second|five second", "bluetooth"]
 language = "en"
 
 [[case]]

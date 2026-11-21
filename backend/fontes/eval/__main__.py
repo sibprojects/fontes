@@ -4,13 +4,21 @@ import argparse
 import asyncio
 import json
 import sys
+import tomllib
 from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
 
-from fontes.eval.cases import DEFAULT_CASES, DEFAULT_SAMPLES, REPO_ROOT, load_cases
+from fontes.eval.cases import (
+    DEFAULT_CASES,
+    DEFAULT_SAMPLES,
+    REPO_ROOT,
+    Case,
+    CaseError,
+    load_cases,
+)
 from fontes.eval.runner import EvalClient, StackError, run
 from fontes.eval.scoring import render, summarize
 
@@ -28,14 +36,18 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     try:
-        return asyncio.run(_main(args, started))
+        cases = load_cases(args.cases, args.samples)
+    except (OSError, tomllib.TOMLDecodeError, CaseError) as exc:
+        print(f"error: {args.cases}: {exc}", file=sys.stderr)
+        return 1
+    try:
+        return asyncio.run(_main(args, cases, started))
     except (StackError, httpx.TransportError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 
 
-async def _main(args: argparse.Namespace, started: datetime) -> int:
-    cases = load_cases(args.cases, args.samples)
+async def _main(args: argparse.Namespace, cases: list[Case], started: datetime) -> int:
     async with EvalClient(args.base_url) as client:
         await client.prepare(args.samples)
         results, provider, model = await run(cases, client)

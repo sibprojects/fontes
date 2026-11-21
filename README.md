@@ -264,7 +264,7 @@ Each answerable question is checked for:
 - **found**: the answer is not `not_found`;
 - **cited**: it cites the expected document;
 - **supported**: every paragraph cites a source;
-- **facts**: it contains the expected facts (for example `90` for oolong). The match ignores case and the spaces inside numbers, and some facts list alternatives (`2 hours|two hours`);
+- **facts**: it contains the expected facts (for example `90` for oolong). The match ignores case, the spaces inside numbers and the citation markers, a number only matches whole (`90` does not match `190`), and some facts list alternatives (`2 hours|two hours`);
 - **language**: it is in the language of the question.
 
 For an off-topic question, the check **not_found** passes when nothing was found. There is no second model judging the answers, so the scores are repeatable and free. The cost is that a correct answer worded differently from the expected fact counts as a miss.
