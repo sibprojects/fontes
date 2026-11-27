@@ -97,6 +97,7 @@ class AnswerOut(BaseModel):
     provider: str | None
     model: str | None
     duration_ms: int
+    follow_up_of: UUID | None
     created_at: datetime
 
     @classmethod
@@ -111,6 +112,7 @@ class AnswerOut(BaseModel):
             provider=answer.provider,
             model=answer.model,
             duration_ms=answer.duration_ms,
+            follow_up_of=answer.follow_up_of,
             created_at=answer.created_at,
         )
 
@@ -119,6 +121,7 @@ class QuestionSummaryOut(BaseModel):
     id: UUID
     question: str
     label: str
+    follow_up_of: UUID | None
     created_at: datetime
 
     @classmethod
@@ -127,5 +130,6 @@ class QuestionSummaryOut(BaseModel):
             id=answer.id,
             question=answer.question,
             label=answer.label.value,
+            follow_up_of=answer.follow_up_of,
             created_at=answer.created_at,
         )

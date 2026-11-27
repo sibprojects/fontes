@@ -77,5 +77,8 @@ class QuestionRow(Base):
     model: Mapped[str | None] = mapped_column(Text)
     duration_ms: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    follow_up_of: Mapped[UUID | None] = mapped_column(
+        ForeignKey("questions.id", ondelete="SET NULL")
+    )
 
     __table_args__ = (Index("ix_questions_created_at", "created_at"),)

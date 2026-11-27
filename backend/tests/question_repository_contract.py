@@ -4,6 +4,7 @@ Imported by tests/test_fakes.py (in-memory fake) and by the integration tests (P
 each module provides its own `questions` fixture.
 """
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
@@ -71,3 +72,13 @@ async def test_not_found_answer_round_trips(questions: QuestionRepository) -> No
     )
     await questions.add(answer)
     assert await questions.get(answer.id) == answer
+
+
+async def test_follow_up_round_trips(questions: QuestionRepository) -> None:
+    parent = make_answer()
+    child = replace(make_answer(T0 + timedelta(seconds=1)), follow_up_of=parent.id)
+    await questions.add(parent)
+    await questions.add(child)
+    assert await questions.get(child.id) == child
+    assert (await questions.get(parent.id) or parent).follow_up_of is None
+    assert [a.follow_up_of for a in await questions.list(2)] == [parent.id, None]

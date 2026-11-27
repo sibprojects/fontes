@@ -22,6 +22,7 @@ const stored: AnswerOut = {
   provider: 'ollama',
   model: 'qwen2.5:7b',
   duration_ms: 1200,
+  follow_up_of: null,
   created_at: '2026-11-13T10:00:00Z',
 }
 

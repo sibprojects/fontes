@@ -31,6 +31,7 @@ def _to_row(answer: Answer) -> QuestionRow:
         model=answer.model,
         duration_ms=answer.duration_ms,
         created_at=answer.created_at,
+        follow_up_of=answer.follow_up_of,
     )
 
 
@@ -57,6 +58,7 @@ def _to_domain(row: QuestionRow) -> Answer:
         model=row.model,
         duration_ms=row.duration_ms,
         created_at=row.created_at,
+        follow_up_of=row.follow_up_of,
     )
 
 

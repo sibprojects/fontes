@@ -22,6 +22,7 @@ from tests.fakes import (
 )
 from tests.question_repository_contract import (  # noqa: F401
     test_add_then_get_round_trips,
+    test_follow_up_round_trips,
     test_get_unknown_is_none,
     test_list_newest_first_with_limit,
     test_not_found_answer_round_trips,

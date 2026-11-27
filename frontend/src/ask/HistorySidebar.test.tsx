@@ -13,8 +13,8 @@ vi.mock('../api/client', async (importOriginal) => ({
 const list = vi.mocked(listQuestions)
 
 const questions: QuestionSummaryOut[] = [
-  { id: 'q2', question: 'Newest question?', label: 'supported', created_at: '2026-11-14T10:00:00Z' },
-  { id: 'q1', question: 'Older question?', label: 'not_found', created_at: '2026-11-13T10:00:00Z' },
+  { id: 'q2', question: 'Newest question?', label: 'supported', follow_up_of: null, created_at: '2026-11-14T10:00:00Z' },
+  { id: 'q1', question: 'Older question?', label: 'not_found', follow_up_of: null, created_at: '2026-11-13T10:00:00Z' },
 ]
 
 beforeEach(() => {

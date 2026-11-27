@@ -179,7 +179,8 @@ async def test_history_lists_newest_first_and_opens_one(env: Env, c: AsyncClient
     second = (await _ask(c, "second?"))[-1][1]["question_id"]
     listed = (await c.get("/questions")).json()
     assert [q["id"] for q in listed] == [second, first]
-    assert set(listed[0]) == {"id", "question", "label", "created_at"}
+    assert set(listed[0]) == {"id", "question", "label", "follow_up_of", "created_at"}
+    assert listed[0]["follow_up_of"] is None
     r = await c.get(f"/questions/{first}")
     assert r.status_code == 200
     body = r.json()
@@ -193,8 +194,10 @@ async def test_history_lists_newest_first_and_opens_one(env: Env, c: AsyncClient
         "provider",
         "model",
         "duration_ms",
+        "follow_up_of",
         "created_at",
     }
+    assert body["follow_up_of"] is None
     assert body["id"] == first
     assert body["question"] == "first?"
     assert body["answer"] == "The answer is X [1]."

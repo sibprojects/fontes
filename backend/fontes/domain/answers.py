@@ -50,3 +50,5 @@ class Answer:
     model: str | None
     duration_ms: int
     created_at: datetime
+    # The stored question this one follows up on; None for a question that stands alone.
+    follow_up_of: UUID | None = None

@@ -47,6 +47,8 @@ export type AnswerOut = {
   provider: string | null
   model: string | null
   duration_ms: number
+  /** The question this one follows up on; null when it stands alone. */
+  follow_up_of: string | null
   created_at: string
 }
 
@@ -54,6 +56,7 @@ export type QuestionSummaryOut = {
   id: string
   question: string
   label: Label
+  follow_up_of: string | null
   created_at: string
 }
 

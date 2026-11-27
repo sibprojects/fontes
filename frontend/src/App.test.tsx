@@ -18,12 +18,14 @@ const q1: QuestionSummaryOut = {
   id: 'q1',
   question: 'Older question?',
   label: 'supported',
+  follow_up_of: null,
   created_at: '2026-11-13T10:00:00Z',
 }
 const q2: QuestionSummaryOut = {
   id: 'q2',
   question: 'How do I run it?',
   label: 'supported',
+  follow_up_of: null,
   created_at: '2026-11-14T10:00:00Z',
 }
 
@@ -39,6 +41,7 @@ const stored: AnswerOut = {
   provider: 'ollama',
   model: 'qwen2.5:7b',
   duration_ms: 1200,
+  follow_up_of: null,
   created_at: '2026-11-13T10:00:00Z',
 }
 

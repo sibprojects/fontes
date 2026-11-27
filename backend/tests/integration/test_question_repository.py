@@ -1,4 +1,6 @@
 from collections.abc import AsyncIterator
+from dataclasses import replace
+from datetime import timedelta
 
 import pytest
 from sqlalchemy import text
@@ -13,6 +15,7 @@ from tests.question_repository_contract import (  # noqa: F401
     T0,
     make_answer,
     test_add_then_get_round_trips,
+    test_follow_up_round_trips,
     test_get_unknown_is_none,
     test_list_newest_first_with_limit,
     test_not_found_answer_round_trips,
@@ -52,3 +55,16 @@ async def test_history_survives_document_delete(
     stored = await questions.get(answer.id)
     assert stored is not None
     assert stored.citations == (citation,)
+
+
+async def test_deleting_the_parent_unlinks_the_follow_up(
+    questions: SqlQuestionRepository, engine: AsyncEngine
+) -> None:
+    parent = make_answer()
+    child = replace(make_answer(T0 + timedelta(seconds=1)), follow_up_of=parent.id)
+    await questions.add(parent)
+    await questions.add(child)
+    async with engine.begin() as conn:
+        await conn.execute(text("DELETE FROM questions WHERE id = :id"), {"id": parent.id})
+    stored = await questions.get(child.id)
+    assert stored is not None and stored.follow_up_of is None
